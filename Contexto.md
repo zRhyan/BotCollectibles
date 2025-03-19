@@ -107,6 +107,26 @@ Próximos Passos
 5. Implementar Comandos da Parte 1 de forma modular (eventualmente com ajuda de IA para boilerplate).
 6. Testar e Ajustar conforme feedback da cliente.
 
+Estrutura atual do projeto:
+
+$ tree -I "venv/"
+.
+├── bot
+│   ├── commands
+│   ├── __init__.py
+│   └── main.py
+├── Contexto.md
+├── database
+│   ├── migrations
+│   └── schema.sql
+├── Dockerfile
+├── docs
+├── README.md
+├── requirements.txt
+└── tests
+
+7 directories, 7 files
+
 
 Este documento é o guia mestre para o desenvolvimento inicial do bot. Qualquer nova ideia ou mudança de requisitos deve ser adicionada aqui para evitar perda de contexto.
 
