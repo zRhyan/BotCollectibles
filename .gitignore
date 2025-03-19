@@ -1,0 +1,14 @@
+# Arquivos de configuração e ambientes virtuais
+.env
+*.log
+__pycache__/
+*.pyc
+.DS_Store
+
+# Banco de dados local
+*.sqlite3
+
+# Configuração do VSCode/PyCharm
+.vscode/
+.idea/
+
