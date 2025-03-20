@@ -119,7 +119,6 @@ $ tree -I "venv/"
 ├── database
 │   ├── migrations
 │   └── schema.sql
-├── Dockerfile
 ├── docs
 ├── README.md
 ├── requirements.txt
