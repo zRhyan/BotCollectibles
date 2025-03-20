@@ -6,6 +6,10 @@ from aiogram.filters import Command
 from dotenv import load_dotenv
 import os
 
+#Command import
+from commands.help import help_command
+from commands.start import start_command
+
 # Carregar variáveis do .env
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -17,10 +21,9 @@ dp = Dispatcher()
 # Logger (para depuração)
 logging.basicConfig(level=logging.INFO)
 
-# Comando de teste
-@dp.message(Command("start"))
-async def start_command(message: Message):
-    await message.answer("Olá! Seu bot está funcionando! 🚀")
+# Dispatcher command registration
+dp.message.register(start_command, Command("start"))
+dp.message.register(help_command, Command("help"))
 
 # Executar o bot
 async def main():

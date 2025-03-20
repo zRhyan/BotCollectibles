@@ -84,8 +84,8 @@ Isso é diferente do fluxo original que era mais textual. Será necessário dete
 - Linguagem: Python
 - Framework de Bot: Aiogram
 - Banco de Dados: PostgreSQL (banco gratuito no Railway)
-- Hospedagem: Railway (com Dockerfile ou buildpack)
-- Controle de Versão: GitHub (repositório privado ou público)
+- Hospedagem: Railway (com Procfile)
+- Controle de Versão: GitHub (repositório privado)
 
 7. Divisão do Projeto
 - Parte 1: Comandos essenciais, cadastro, inventário, sistema de captura e loja, trocas básicas, ranking, etc.
@@ -113,6 +113,8 @@ $ tree -I "venv/"
 .
 ├── bot
 │   ├── commands
+│   │   ├── help.py
+│   │   └── start.py
 │   ├── __init__.py
 │   └── main.py
 ├── Contexto.md
@@ -120,12 +122,12 @@ $ tree -I "venv/"
 │   ├── migrations
 │   └── schema.sql
 ├── docs
+├── Procfile
 ├── README.md
 ├── requirements.txt
 └── tests
 
-7 directories, 7 files
-
+7 directories, 9 files
 
 Este documento é o guia mestre para o desenvolvimento inicial do bot. Qualquer nova ideia ou mudança de requisitos deve ser adicionada aqui para evitar perda de contexto.
 
