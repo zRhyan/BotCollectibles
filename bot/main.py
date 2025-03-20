@@ -9,6 +9,7 @@ import os
 #Command import
 from commands.help import help_command
 from commands.start import start_command
+from commands.jornada import jornada_command
 
 # Carregar variáveis do .env
 load_dotenv()
@@ -24,6 +25,7 @@ logging.basicConfig(level=logging.INFO)
 # Dispatcher command registration
 dp.message.register(start_command, Command("start"))
 dp.message.register(help_command, Command("help"))
+dp.message.register(jornada_command, Command("jornada"))
 
 # Executar o bot
 async def main():
