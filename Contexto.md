@@ -114,6 +114,7 @@ $ tree -I "venv/"
 ├── bot
 │   ├── commands
 │   │   ├── help.py
+│   │   ├── jornada.py
 │   │   └── start.py
 │   ├── __init__.py
 │   └── main.py
