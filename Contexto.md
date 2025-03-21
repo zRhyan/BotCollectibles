@@ -129,6 +129,13 @@ $ tree -I "venv/"
 
 7 directories, 9 files
 
+requirements.txt:
+aiogram==3.18.0
+sqlalchemy==2.0.39
+asyncpg==0.30.0
+python-dotenv==1.0.1
+psycopg2-binary==2.9.10
+
 Este documento é o guia mestre para o desenvolvimento inicial do bot. Qualquer nova ideia ou mudança de requisitos deve ser adicionada aqui para evitar perda de contexto.
 
 
