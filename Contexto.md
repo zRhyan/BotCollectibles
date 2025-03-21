@@ -136,6 +136,8 @@ asyncpg==0.30.0
 python-dotenv==1.0.1
 psycopg2-binary==2.9.10
 
+Eu estou usando FSM States para fazer o gerenciamento de estados.
+
 Este documento é o guia mestre para o desenvolvimento inicial do bot. Qualquer nova ideia ou mudança de requisitos deve ser adicionada aqui para evitar perda de contexto.
 
 
