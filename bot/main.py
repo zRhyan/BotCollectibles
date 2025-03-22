@@ -19,8 +19,12 @@ from database.session import engine
 
 # Function to create the database schema
 async def create_db():
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("Database schema created successfully!")
+    except Exception as e:
+        print(f"Failed to create database schema: {e}")
 
 # Load environment variables
 load_dotenv()
