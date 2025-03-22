@@ -1,9 +1,9 @@
-
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 import os
 from typing import AsyncGenerator
+from contextlib import asynccontextmanager
 
 # Load environment variables
 load_dotenv()
@@ -27,6 +27,7 @@ AsyncSessionLocal = sessionmaker(
 )
 
 # Dependency to get the session
+@asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
         yield session
