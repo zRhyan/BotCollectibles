@@ -1,9 +1,13 @@
 import asyncio
 import logging
+import sys
+import os
 from aiogram import Bot, Dispatcher
 from aiogram.filters import Command
 from dotenv import load_dotenv
-import os
+
+# Add the root directory to sys.path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Import routers
 from commands.help import help_command
