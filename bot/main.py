@@ -13,6 +13,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from commands.help import help_command
 from commands.start import start_command
 from commands.jornada import router as jornada_router
+from commands.mochila import router as mochila_router
 
 from database.models import Base
 from database.session import engine
@@ -52,6 +53,7 @@ dp.message.register(help_command, Command("help"))
 
 # Include the jornada router
 dp.include_router(jornada_router)
+dp.include_router(mochila_router)
 
 # Run the bot
 async def main():
