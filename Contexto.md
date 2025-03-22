@@ -118,17 +118,22 @@ $ tree -I "venv/"
 │   │   └── start.py
 │   ├── __init__.py
 │   └── main.py
+├── Context.md
 ├── Contexto.md
 ├── database
+│   ├── crud_user.py
+│   ├── __init__.py
 │   ├── migrations
-│   └── schema.sql
+│   ├── models.py
+│   ├── schema.sql
+│   └── session.py
 ├── docs
 ├── Procfile
 ├── README.md
 ├── requirements.txt
 └── tests
 
-7 directories, 9 files
+7 directories, 15 files
 
 requirements.txt:
 aiogram==3.18.0

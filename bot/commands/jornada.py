@@ -4,10 +4,10 @@ from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from sqlalchemy.exc import IntegrityError
 
-# Simulating a database with dictionaries (replace with actual database logic later)
-registered_users = {}  # Key: Telegram ID, Value: {"username": str, "nickname": str, "cards": [], "coins": int}
-nicknames = set()  # Set to track all registered nicknames
+from database.session import get_session
+from database.crud_user import get_user_by_id, get_user_by_nickname, create_user
 
 # Define a Router
 router = Router()
@@ -23,9 +23,12 @@ async def jornada_command(message: Message, state: FSMContext):
     user_id = message.from_user.id
     username = message.from_user.username or "Usuário sem @"
 
-    if user_id in registered_users:
-        nickname = registered_users[user_id]["nickname"]
-        await message.answer(f"Você já está registrado como @{nickname}, {username}! 🚀")
+    async with get_session() as session:
+        # Check if the user is already registered
+        user = await get_user_by_id(session, user_id)
+
+    if user:
+        await message.answer(f"Você já está registrado como @{user.nickname}, {username}! 🚀")
     else:
         await message.answer(
             "Bem-vindo à sua jornada! 🎉\n"
@@ -47,9 +50,14 @@ async def process_nickname(message: Message, state: FSMContext):
     if " " in nickname:
         await message.answer("O @ não pode conter espaços. Tente novamente:")
         return
-    if nickname in nicknames:
-        await message.answer("Este @ já está em uso. Escolha outro:")
-        return
+
+    async with get_session() as session:
+        # Check if the nickname is already taken
+        existing_nickname = await get_user_by_nickname(session, nickname)
+
+        if existing_nickname:
+            await message.answer("Este @ já está em uso. Escolha outro:")
+            return
 
     # Save the nickname temporarily in FSM context
     await state.update_data(nickname=nickname)
@@ -73,21 +81,27 @@ async def process_nickname(message: Message, state: FSMContext):
 @router.callback_query(F.data.in_({"confirm_nickname", "reject_nickname"}), JornadaStates.confirming_nickname)
 async def handle_confirmation(callback: CallbackQuery, state: FSMContext):
     user_id = callback.from_user.id
+    username = callback.from_user.username or "Usuário sem @"
     data = await state.get_data()
     nickname = data.get("nickname")
 
     if callback.data == "confirm_nickname":
-        # Save the user and nickname
-        username = callback.from_user.username or "Usuário sem @"
-        registered_users[user_id] = {"username": username, "nickname": nickname, "cards": [], "coins": 0}
-        nicknames.add(nickname)
+        async with get_session() as session:
+            try:
+                # Save the user to the database
+                new_user = await create_user(session, user_id, username, nickname)
 
-        # Clear the state
-        await state.clear()
+                # Clear the state
+                await state.clear()
 
-        await callback.message.edit_text(
-            f"Parabéns, @{nickname}! Você agora está registrado no bot e pronto para capturar cartas! 🎉"
-        )
+                await callback.message.edit_text(
+                    f"Parabéns, @{nickname}! Você agora está registrado no bot e pronto para capturar cartas! 🎉"
+                )
+            except IntegrityError:
+                await session.rollback()
+                await callback.message.edit_text(
+                    "Houve um erro ao salvar seu @. Por favor, tente novamente."
+                )
     elif callback.data == "reject_nickname":
         # Ask the user to choose another nickname
         await callback.message.edit_text(
