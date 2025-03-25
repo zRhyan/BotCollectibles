@@ -3,8 +3,8 @@ from aiogram.filters import Command
 from sqlalchemy.future import select
 from sqlalchemy.sql import func
 from database.models import User, Card, Inventory
-from database.session import get_session  # Correct import
-from aiogram.enums import ParseMode
+from database.session import get_session
+from aiogram.types import ParseMode  # ✅ Corrected import
 
 router = Router()
 
@@ -12,18 +12,22 @@ router = Router()
 async def capturar_card(message: types.Message):
     user_id = message.from_user.id
 
-    async with get_session() as session:  # Use get_session for session management
+    async with get_session() as session:
         # Check if user exists
         user = await session.get(User, user_id)
         if not user:
-            await message.reply("❌ **Treinador não encontrado!** Use `/jornada` para começar sua aventura."),
-            parse_mode=ParseMode.MARKDOWN
+            await message.reply(
+                "❌ **Treinador não encontrado!** Use `/jornada` para começar sua aventura.",
+                parse_mode=ParseMode.MARKDOWN
+            )
             return
 
         # Check if user has pokéballs
         if user.pokeballs <= 0:
-            await message.reply("🎯 **Sem pokébolas!** Você precisa de mais pokébolas para capturar cards."),
-            parse_mode=ParseMode.MARKDOWN
+            await message.reply(
+                "🎯 **Sem pokébolas!** Você precisa de mais pokébolas para capturar cards.",
+                parse_mode=ParseMode.MARKDOWN
+            )
             return
 
         # Deduct one pokéball
@@ -34,13 +38,18 @@ async def capturar_card(message: types.Message):
         card = result.scalar_one_or_none()
 
         if not card:
-            await message.reply("⚠️ **Nenhum card disponível!** Tente novamente mais tarde."),
-            parse_mode=ParseMode.MARKDOWN
+            await message.reply(
+                "⚠️ **Nenhum card disponível!** Tente novamente mais tarde.",
+                parse_mode=ParseMode.MARKDOWN
+            )
             return
 
         # Add card to user's inventory
         inventory_item = await session.execute(
-            select(Inventory).where(Inventory.user_id == user_id, Inventory.card_id == card.id)
+            select(Inventory).where(
+                Inventory.user_id == user_id,
+                Inventory.card_id == card.id
+            )
         )
         inventory_item = inventory_item.scalar_one_or_none()
 
@@ -53,5 +62,7 @@ async def capturar_card(message: types.Message):
         await session.commit()
 
         # Reply with success message
-        await message.reply(f"🎉 **Parabéns!** Você capturou o card: **{card.name}**! 🃏✨"),
-        parse_mode=ParseMode.MARKDOWN
+        await message.reply(
+            f"🎉 **Parabéns!** Você capturou o card: **{card.name}**! 🃏✨",
+            parse_mode=ParseMode.MARKDOWN
+        )
