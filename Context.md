@@ -35,34 +35,34 @@ The project is divided into two main parts:
 - /historico (player id): Display player's last 100 card history
 
 ### 3. General Commands
-1. /jornada: Register the person in the bot, requesting a unique @ for their profile.
-2. /cap or /capturar: Spin/capture a card (using pokéballs).
-3. /evoluir or /ev: Evolve/customize a card (upon reaching certain card quantity milestones).
-4. /pokebola or /pb: Display a specific card (by ID or name).
-5. /mochila: Show the player's complete inventory.
-6. /pokedex or /pd: Show the collection/album.
-7. /explorar: Get a free card every 12h (or defined period).
-8. /pokemart or /pokem: Store for purchasing event cards, stickers, banners.
-9. /pokebanco: Display coins (pokécoins), captures, and pokéballs.
-10. /doar: Donate cards or captures to another player.
-11. /roubar or /r: Trading cards between players, with confirmation.
-12. /ginasio: Show ranking of who has more cards of a specific type.
-13. /comprarbolas: Additional purchase of spins/pokéballs.
-14. /favpoke: Set favorite card.
-15. /pokew: Add cards to wishlist.
-16. /pokewish or /wl: Display own wishlist or others' (when tagging another user).
-17. /pokerw: Remove cards from wishlist.
-18. /treinador: View player profile.
-19. /dbola or /deletebola: Delete specific cards.
-20. /ddex: Delete an entire collection.
-21. /shiny: View special/event cards (still in definition).
-22. /pcat: View player's captives.
-23. /amantes: Marry another player (cumulative trades until reaching marriage).
-24. /discomon: Favorite an album or music in profile.
-25. /especie: Display tags of groups/members.
-26. /digimon [@account1] for [@account2]: Link accounts so rewards fall into a main account.
-27. /favemo: Define a favorite emoji that appears in the profile.
-28. /pokewish (without parameters or tagging another player) shows how many cards from the other player's wish you have.
+1.  (X) /jornada: Register the person in the bot, requesting a unique @ for their profile.
+2.  (X) /cap or /capturar: Spin/capture a card (using pokéballs).
+3.  ( ) /evoluir or /ev: Evolve/customize a card (upon reaching certain card quantity milestones).
+4.  ( ) /pokebola or /pb: Display a specific card (by ID or name).
+5.  (X) /mochila: Show the player's complete inventory.
+6.  ( ) /pokedex or /pd: Show the collection/album.
+7.  ( ) /explorar: Get a free card every 12h (or defined period).
+8.  ( ) /pokemart or /pokem: Store for purchasing event cards, stickers, banners.
+9.  ( ) /pokebanco: Display coins (pokécoins), captures, and pokéballs.
+10. ( ) /doar: Donate cards or captures to another player.
+11. ( ) /roubar or /r: Trading cards between players, with confirmation.
+12. ( ) /ginasio: Show ranking of who has more cards of a specific type.
+13. ( ) /comprarbolas: Additional purchase of spins/pokéballs.
+14. ( ) /favpoke: Set favorite card.
+15. ( ) /pokew: Add cards to wishlist.
+16. ( ) /pokewish or /wl: Display own wishlist or others' (when tagging another user).
+17. ( ) /pokerw: Remove cards from wishlist.
+18. ( ) /treinador: View player profile.
+19. ( ) /dbola or /deletebola: Delete specific cards.
+20. ( ) /ddex: Delete an entire collection.
+21. ( ) /shiny: View special/event cards (still in definition).
+22. ( ) /pcat: View player's captives.
+23. ( ) /amantes: Marry another player (cumulative trades until reaching marriage).
+24. ( ) /discomon: Favorite an album or music in profile.
+25. ( ) /especie: Display tags of groups/members.
+26. ( ) /digimon [@account1] for [@account2]: Link accounts so rewards fall into a main account.
+27. ( ) /favemo: Define a favorite emoji that appears in the profile.
+28. ( ) /pokewish (without parameters or tagging another player) shows how many cards from the other player's wish you have.
 
 ### 4. User Behaviors
 1. Welcome message: When entering the bot for the first time, asks to choose an @ for the profile and informs about the need to be in the news channel.

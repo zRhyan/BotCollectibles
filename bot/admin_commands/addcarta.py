@@ -1,0 +1,60 @@
+from aiogram import Router, types
+from aiogram.filters import Command
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from database.models import Card
+from database.session import async_session
+
+router = Router()
+
+# List of admin user IDs (replace with actual admin IDs)
+ADMIN_IDS = [123456789, 987654321]
+
+@router.message(Command(commands=["addcarta", "add"]))
+async def add_card(message: types.Message):
+    # Check if the user is an admin
+    if message.from_user.id not in ADMIN_IDS:
+        await message.reply("Você não tem permissão para usar este comando.")
+        return
+
+    # Ensure the command is a reply to a message
+    if not message.reply_to_message:
+        await message.reply("Por favor, responda a uma mensagem contendo a imagem e a legenda do card.")
+        return
+
+    # Ensure the replied message contains an image
+    if not message.reply_to_message.photo:
+        await message.reply("A mensagem respondida deve conter uma imagem do card.")
+        return
+
+    # Ensure the replied message contains a caption
+    if not message.reply_to_message.caption:
+        await message.reply("A mensagem respondida deve conter uma legenda com o nome e a raridade do card.")
+        return
+
+    # Extract image file ID and caption
+    photo_file_id = message.reply_to_message.photo[-1].file_id  # Get the highest resolution image
+    caption = message.reply_to_message.caption
+
+    # Parse the caption (e.g., "Card Name | Rarity")
+    try:
+        card_name, rarity = map(str.strip, caption.split("|"))
+    except ValueError:
+        await message.reply("A legenda deve estar no formato: `Nome do Card | Raridade`.")
+        return
+
+    # Save the card in the database
+    async with async_session() as session:
+        # Check if the card already exists
+        existing_card = await session.execute(select(Card).where(Card.name == card_name))
+        if existing_card.scalar_one_or_none():
+            await message.reply("Um card com este nome já existe no sistema.")
+            return
+
+        # Add the new card
+        new_card = Card(name=card_name, rarity=rarity, image_file_id=photo_file_id)
+        session.add(new_card)
+        await session.commit()
+
+    # Confirm success
+    await message.reply(f"O card '{card_name}' foi adicionado com sucesso!")

@@ -15,6 +15,8 @@ from commands.start import start_command
 from commands.jornada import router as jornada_router
 from commands.mochila import router as mochila_router
 from commands.pokebanco import router as pokebanco_router
+from commands.capturar import router as capturar_router
+from admin_commands.addcarta import router as addcarta_router
 
 from database.models import Base
 from database.session import engine
@@ -71,6 +73,8 @@ dp.message.register(help_command, Command("help"))
 dp.include_router(jornada_router)
 dp.include_router(mochila_router)
 dp.include_router(pokebanco_router)
+dp.include_router(capturar_router)
+dp.include_router(addcarta_router)
 
 # Run the bot
 async def main():
