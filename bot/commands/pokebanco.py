@@ -31,5 +31,6 @@ async def pokebanco_command(message: Message):
             f"🏦 **PokéBanco** 🏦\n\n"
             f"💰 Moedas: {coins}\n"
             f"🎯 Pokébolas: {pokeballs}\n"
-            f"📸 Capturas: {captures}\n"
+            f"📸 Capturas: {captures}\n",
+            parse_mode="Markdown"
         )
