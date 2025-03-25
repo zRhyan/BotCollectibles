@@ -1,19 +1,11 @@
 import asyncio
-import sys
-import os
-
-# Add the root directory to sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+from database.models import Base
 from database.session import engine
 
-async def test_connection():
-    try:
-        async with engine.connect() as conn:
-            result = await conn.execute("SELECT 1")
-            print("Database connection successful:", result.scalar())
-    except Exception as e:
-        print("Database connection failed:", str(e))
+async def recreate_database():
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)    # Drops old tables
+        await conn.run_sync(Base.metadata.create_all)  # Creates new ones with all columns
 
 if __name__ == "__main__":
-    asyncio.run(test_connection())
+    asyncio.run(recreate_database())
