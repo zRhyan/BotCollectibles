@@ -19,11 +19,18 @@ from commands.pokebanco import router as pokebanco_router
 from database.models import Base
 from database.session import engine
 
-#Temporary import for recreate database and temporary function call
+#------------------------------------------------------
+# Teporary function to recreate the database schema
+#------------------------------------------------------
 from database.init_db import recreate_database
-async def main():
-    await recreate_database()  # Just once!
-    await dp.start_polling(bot)
+async def recreate_database():
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+        print("✅ Database schema dropped and recreated.")
+    except Exception as e:
+        print(f"Failed to recreate database schema: {e}")
 
 # Function to create the database schema
 async def create_db():
@@ -67,10 +74,12 @@ dp.include_router(pokebanco_router)
 
 # Run the bot
 async def main():
-    # Initialize the database schema
-    await create_db()
-    print("Database schema created successfully!")
+    # Uncomment this when you don't wuant to reset the database
+    # await create_db()
+    # print("Database schema created successfully!")
 
+    # Recreate the database schema. Comment this later.
+    await recreate_database
     # Start polling
     await dp.start_polling(bot)
 
