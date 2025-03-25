@@ -15,56 +15,34 @@ ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD")
 
 router = Router()
 
-# Define FSM states
-class AdminFSM(StatesGroup):
-    waiting_for_password = State()
-
 @router.message(Command(commands=["admin"]))
-async def start_admin_promotion(message: types.Message, state: FSMContext):
+async def promote_to_admin(message: types.Message):
     # Ensure the command includes a nickname
     if len(message.text.split()) != 2:
-        await message.reply("❗ **Erro:** Use o comando no formato `/admin @nickname`.", parse_mode=ParseMode.MARKDOWN)
+        await message.reply("❗ **Erro:** Use o comando no formato `/admin @nickname`.")
         return
 
     nickname = message.text.split()[1].lstrip("@")
 
-    # Check if the user exists in the database
+    # Check if the user issuing the command is an admin
     async with get_session() as session:
-        result = await session.execute(select(User).where(User.nickname == nickname))
-        user = result.scalar_one_or_none()
+        result = await session.execute(select(User).where(User.id == message.from_user.id))
+        current_user = result.scalar_one_or_none()
 
-        if not user:
+        if not current_user or current_user.is_admin == 0:
+            await message.reply("🚫 **Acesso negado!** Somente administradores podem usar este comando.")
+            return
+
+        # Check if the target user exists
+        result = await session.execute(select(User).where(User.nickname == nickname))
+        target_user = result.scalar_one_or_none()
+
+        if not target_user:
             await message.reply(f"❌ **Erro:** O usuário com o nickname @{nickname} não foi encontrado.")
             return
 
-    # Save the nickname in the FSM context and ask for the password
-    await state.update_data(nickname=nickname)
-    await message.reply("🔒 **Digite a senha de administrador para continuar:**", parse_mode=ParseMode.MARKDOWN)
-    await state.set_state(AdminFSM.waiting_for_password)
+        # Promote the target user to admin
+        target_user.is_admin = 1
+        await session.commit()
 
-@router.message(AdminFSM.waiting_for_password)
-async def process_admin_password(message: types.Message, state: FSMContext):
-    # Retrieve the nickname from the FSM context
-    data = await state.get_data()
-    nickname = data.get("nickname")
-
-    # Check if the password is correct
-    if message.text != ADMIN_PASSWORD:
-        await message.reply("❌ **Senha incorreta!** A promoção foi cancelada.", parse_mode=ParseMode.MARKDOWN)
-        await state.clear()
-        return
-
-    # Promote the user to admin
-    async with get_session() as session:
-        result = await session.execute(select(User).where(User.nickname == nickname))
-        user = result.scalar_one_or_none()
-
-        if user:
-            user.is_admin = 1
-            await session.commit()
-            await message.reply(f"✅ **Sucesso!** O usuário @{nickname} agora é um administrador.", parse_mode=ParseMode.MARKDOWN)
-        else:
-            await message.reply(f"❌ **Erro:** O usuário @{nickname} não foi encontrado no banco de dados.")
-
-    # Clear the FSM state
-    await state.clear()
+        await message.reply(f"✅ **Sucesso!** O usuário @{nickname} agora é um administrador.")

@@ -1,13 +1,16 @@
-from aiogram import Router, F
+from aiogram import Router, F, types
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.enums import ParseMode
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.future import select
 
 from database.session import get_session
 from database.crud_user import get_user_by_id, get_user_by_nickname, create_user
+from database.models import User
 
 # Define a Router
 router = Router()
@@ -109,3 +112,40 @@ async def handle_confirmation(callback: CallbackQuery, state: FSMContext):
         )
         # Set the state back to "waiting_for_nickname"
         await state.set_state(JornadaStates.waiting_for_nickname)
+
+@router.message(Command(commands=["jornada"]))
+async def register_user(message: types.Message):
+    user_id = message.from_user.id
+    username = message.from_user.username
+    nickname = message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else None
+
+    if not nickname:
+        await message.reply("❗ **Erro:** Você precisa fornecer um nickname. Use o comando no formato `/jornada <nickname>`." 
+                            parse_mode=ParseMode.MARKDOWN)
+        return
+
+    async with get_session() as session:
+        # Check if the user is already registered
+        existing_user = await session.execute(select(User).where(User.id == user_id))
+        if existing_user.scalar_one_or_none():
+            await message.reply("❌ Você já está registrado no bot!")
+            return
+
+        # Check if this is the first user
+        result = await session.execute(select(User).limit(1))
+        is_first_user = result.scalar_one_or_none() is None
+
+        # Register the user
+        new_user = User(
+            id=user_id,
+            username=username,
+            nickname=nickname,
+            is_admin=1 if is_first_user else 0  # First user becomes admin
+        )
+        session.add(new_user)
+        await session.commit()
+
+        if is_first_user:
+            await message.reply(f"🎉 Bem-vindo, {nickname}! Você foi registrado como o primeiro usuário e agora é um administrador!")
+        else:
+            await message.reply(f"🎉 Bem-vindo, {nickname}! Sua jornada começou!")
