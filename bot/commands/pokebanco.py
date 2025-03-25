@@ -20,7 +20,8 @@ async def pokebanco_command(message: Message):
         if not user:
             await message.answer(
                 "❌ **Treinador não encontrado!** ❌\n\n"
-                "Parece que você ainda não começou sua jornada. Use `/jornada` para se registrar e começar sua aventura! 🚀"
+                "Parece que você ainda não começou sua jornada. Use `/jornada` para se registrar e começar sua aventura! 🚀",
+                 parse_mode=ParseMode.MARKDOWN
             )
             return
 

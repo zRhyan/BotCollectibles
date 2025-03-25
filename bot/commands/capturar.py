@@ -4,6 +4,7 @@ from sqlalchemy.future import select
 from sqlalchemy.sql import func
 from database.models import User, Card, Inventory
 from database.session import get_session  # Correct import
+from aiogram.enums import ParseMode
 
 router = Router()
 
@@ -15,12 +16,14 @@ async def capturar_card(message: types.Message):
         # Check if user exists
         user = await session.get(User, user_id)
         if not user:
-            await message.reply("❌ **Treinador não encontrado!** Use `/jornada` para começar sua aventura.")
+            await message.reply("❌ **Treinador não encontrado!** Use `/jornada` para começar sua aventura."),
+            parse_mode=ParseMode.MARKDOWN
             return
 
         # Check if user has pokéballs
         if user.pokeballs <= 0:
-            await message.reply("🎯 **Sem pokébolas!** Você precisa de mais pokébolas para capturar cards.")
+            await message.reply("🎯 **Sem pokébolas!** Você precisa de mais pokébolas para capturar cards."),
+            parse_mode=ParseMode.MARKDOWN
             return
 
         # Deduct one pokéball
@@ -31,7 +34,8 @@ async def capturar_card(message: types.Message):
         card = result.scalar_one_or_none()
 
         if not card:
-            await message.reply("⚠️ **Nenhum card disponível!** Tente novamente mais tarde.")
+            await message.reply("⚠️ **Nenhum card disponível!** Tente novamente mais tarde."),
+            parse_mode=ParseMode.MARKDOWN
             return
 
         # Add card to user's inventory
@@ -49,4 +53,5 @@ async def capturar_card(message: types.Message):
         await session.commit()
 
         # Reply with success message
-        await message.reply(f"🎉 **Parabéns!** Você capturou o card: **{card.name}**! 🃏✨")
+        await message.reply(f"🎉 **Parabéns!** Você capturou o card: **{card.name}**! 🃏✨"),
+        parse_mode=ParseMode.MARKDOWN
