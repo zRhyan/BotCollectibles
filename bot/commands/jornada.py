@@ -120,8 +120,10 @@ async def register_user(message: types.Message):
     nickname = message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else None
 
     if not nickname:
-        await message.reply("❗ **Erro:** Você precisa fornecer um nickname. Use o comando no formato `/jornada <nickname>`.", 
-                            parse_mode=ParseMode.MARKDOWN)
+        await message.reply(
+            "❗ **Erro:** Você precisa fornecer um nickname. Use o comando no formato `/jornada <nickname>`.",
+            parse_mode=ParseMode.MARKDOWN
+        )
         return
 
     async with get_session() as session:
@@ -132,8 +134,8 @@ async def register_user(message: types.Message):
             return
 
         # Check if this is the first user
-        result = await session.execute(select(User).limit(1))
-        is_first_user = result.scalar_one_or_none() is None
+        result = await session.execute(select(User.id).limit(1))
+        is_first_user = result.scalar_one_or_none() is None  # True if no users exist
 
         # Register the user
         new_user = User(
@@ -146,6 +148,8 @@ async def register_user(message: types.Message):
         await session.commit()
 
         if is_first_user:
-            await message.reply(f"🎉 Bem-vindo, {nickname}! Você foi registrado como o primeiro usuário e agora é um administrador!")
+            await message.reply(
+                f"🎉 Bem-vindo, {nickname}! Você foi registrado como o primeiro usuário e agora é um administrador!"
+            )
         else:
             await message.reply(f"🎉 Bem-vindo, {nickname}! Sua jornada começou!")
