@@ -20,7 +20,7 @@ from database.models import Base
 from database.session import engine
 
 #Temporary import for recreate database and temporary function call
-from database.database_recreation import recreate_database
+from database.init_db import recreate_database
 async def main():
     await recreate_database()  # Just once!
     await dp.start_polling(bot)
