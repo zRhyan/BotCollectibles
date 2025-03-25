@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from dotenv import load_dotenv
 
 # Add the root directory to sys.path
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 # Import routers
 from commands.help import help_command
