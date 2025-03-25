@@ -1,6 +1,7 @@
 from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
+from aiogram.enums import ParseMode
 
 # Database imports
 from database.session import get_session
@@ -32,5 +33,5 @@ async def pokebanco_command(message: Message):
             f"💰 Moedas: {coins}\n"
             f"🎯 Pokébolas: {pokeballs}\n"
             f"📸 Capturas: {captures}\n",
-            parse_mode="Markdown"
+            parse_mode=ParseMode.MARKDOWN
         )
