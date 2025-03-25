@@ -98,12 +98,12 @@ This differs from the original flow which was more textual. It will be necessary
 - Command to give captures and coins to admins will be implemented in Part 2, but the foundation for /add, /addb etc. will already be in Part 1.
 
 ## Next Steps
-1. Define Scope of Part 1: It has already been defined that only explicitly agreed functionalities remain in Part 1. Commands to give coins and extra banners to admins, for example, will be in Part 2.
-2. Create GitHub Repository with folder structure (docs, bot, database, tests).
-3. Configure Aiogram: Create basic bot that responds to /start.
-4. Configure PostgreSQL on Railway and test connection.
-5. Implement Part 1 Commands in a modular way (eventually with AI help for boilerplate).
-6. Test and Adjust according to client feedback.
+1. Define Scope of Part 1: It has already been defined that only explicitly agreed functionalities remain in Part 1. Commands to give coins and extra banners to admins, for example, will be in Part 2.(X)
+2. Create GitHub Repository with folder structure (docs, bot, database, tests). (X)
+3. Configure Aiogram: Create basic bot that responds to /start. (X)
+4. Configure PostgreSQL on Railway and test connection. (X)
+5. Implement Part 1 Commands in a modular way (eventually with AI help for boilerplate). ( )
+6. Test and Adjust according to client feedback. ( )
 
 ## Current project structure:
 ```

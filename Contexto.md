@@ -100,12 +100,12 @@ Isso é diferente do fluxo original que era mais textual. Será necessário dete
 
 
 Próximos Passos
-1. Definir Escopo da Parte 1: Já foi definido que ficam na Parte 1 apenas as funcionalidades explicitamente combinadas. Os comandos para dar coins e banners extras para admins, por exemplo, ficarão para a Parte 2.
-2. Criar Repositório no GitHub com a estrutura de pastas (docs, bot, database, tests).
-3. Configurar Aiogram: Criar bot básico que responde a /start.
-4. Configurar PostgreSQL no Railway e testar conexão.
-5. Implementar Comandos da Parte 1 de forma modular (eventualmente com ajuda de IA para boilerplate).
-6. Testar e Ajustar conforme feedback da cliente.
+1. Definir Escopo da Parte 1: Já foi definido que ficam na Parte 1 apenas as funcionalidades explicitamente combinadas. Os comandos para dar coins e banners extras para admins, por exemplo, ficarão para a Parte 2. (X)
+2. Criar Repositório no GitHub com a estrutura de pastas (docs, bot, database, tests). (X)
+3. Configurar Aiogram: Criar bot básico que responde a /start. (X)
+4. Configurar PostgreSQL no Railway e testar conexão. (X)
+5. Implementar Comandos da Parte 1 de forma modular (eventualmente com ajuda de IA para boilerplate). ( )
+6. Testar e Ajustar conforme feedback da cliente. ( )
 
 Estrutura atual do projeto:
 
