@@ -12,4 +12,4 @@ async def help_command(message: Message):
         "🔹 `/mochila` - Mostrar seu inventário\n"
         "🔹 `/pokebanco` - Ver o estado do seu PokéBanco\n"
     )
-    await message.answer(help_text, parse_mode=types.ParseMode.MARKDOWN)
+    await message.answer(help_text, parse_mode=ParseMode.MARKDOWN)
