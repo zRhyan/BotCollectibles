@@ -1,9 +1,9 @@
 from aiogram import Router, types
 from aiogram.filters import Command
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
+from sqlalchemy.sql import func
 from database.models import User, Card, Inventory
-from database.session import async_session
+from database.session import get_session  # Correct import
 
 router = Router()
 
@@ -11,7 +11,7 @@ router = Router()
 async def capturar_card(message: types.Message):
     user_id = message.from_user.id
 
-    async with async_session() as session:
+    async with get_session() as session:  # Use get_session for session management
         # Check if user exists
         user = await session.get(User, user_id)
         if not user:
