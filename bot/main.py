@@ -19,6 +19,12 @@ from commands.pokebanco import router as pokebanco_router
 from database.models import Base
 from database.session import engine
 
+#Temporary import for recreate database and temporary function call
+from database.database_recreation import recreate_database
+async def main():
+    await recreate_database()  # Just once!
+    await dp.start_polling(bot)
+
 # Function to create the database schema
 async def create_db():
     try:
