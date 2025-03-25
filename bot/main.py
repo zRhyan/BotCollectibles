@@ -79,7 +79,7 @@ async def main():
     # print("Database schema created successfully!")
 
     # Recreate the database schema. Comment this later.
-    await recreate_database
+    await recreate_database()
     # Start polling
     await dp.start_polling(bot)
 
