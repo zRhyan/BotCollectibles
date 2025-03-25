@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
 from .models import User
-from database.models import Inventory, Card  # Assuming these models exist
+from database.models import Inventory, Card
 
 async def get_user_by_id(session, user_id):
     result = await session.execute(select(User).where(User.id == user_id))

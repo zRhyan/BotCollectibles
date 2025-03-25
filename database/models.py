@@ -11,6 +11,8 @@ class User(Base):
     username = Column(String(32), nullable=True)
     nickname = Column(String(20), unique=True, nullable=False)
     coins = Column(Integer, default=0)
+    pokeballs = Column(Integer, default=0)
+    captures = Column(Integer, default=0)
 
     # Relationship to inventory
     inventory = relationship("Inventory", back_populates="user")

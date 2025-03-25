@@ -112,21 +112,24 @@ Estrutura atual do projeto:
 $ tree -I "venv/"
 .
 ├── bot
-│   ├── commands
-│   │   ├── help.py
-│   │   ├── jornada.py
-│   │   └── start.py
-│   ├── __init__.py
-│   └── main.py
+│   ├── commands
+│   │   ├── help.py
+│   │   ├── jornada.py
+│   │   ├── mochila.py
+│   │   └── start.py
+│   ├── __init__.py
+│   └── main.py
+├── bot.log
 ├── Context.md
 ├── Contexto.md
 ├── database
-│   ├── crud_user.py
-│   ├── __init__.py
-│   ├── migrations
-│   ├── models.py
-│   ├── schema.sql
-│   └── session.py
+│   ├── crud_user.py
+│   ├── __init__.py
+│   ├── migrations
+│   ├── models.py
+│   ├── schema.sql
+│   ├── session.py
+│   └── test_db_connection.py
 ├── docs
 ├── Procfile
 ├── README.md
@@ -134,6 +137,58 @@ $ tree -I "venv/"
 └── tests
 
 7 directories, 15 files
+
+## Estrutura Atual do Banco de Dados
+
+### 1. Tabela de Usuários (`users`)
+**Propósito**: Armazena informações sobre os usuários do bot.
+
+**Colunas**:
+- `id` (BigInteger, Chave Primária): O ID do usuário no Telegram.
+- `username` (String, Nulo): O nome de usuário do Telegram.
+- `nickname` (String, Único, Não Nulo): Um apelido único escolhido pelo usuário.
+- `coins` (Integer, Padrão: 0): A quantidade de moedas que o usuário possui.
+
+**Relacionamentos**:
+- Um-para-Muitos com a tabela `inventory` (via `Inventory.user_id`)
+
+---
+
+### 2. Tabela de Cartas (`cards`)
+**Propósito**: Armazena informações sobre as cartas colecionáveis.
+
+**Colunas**:
+- `id` (Integer, Chave Primária, Auto-incremento): O ID único da carta.
+- `name` (String, Não Nulo): O nome da carta.
+- `rarity` (String, Não Nulo): O nível de raridade da carta (ex.: *Comum*, *Rara*).
+
+**Relacionamentos**:
+- Um-para-Muitos com a tabela `inventory` (via `Inventory.card_id`)
+
+---
+
+### 3. Tabela de Inventário (`inventory`)
+**Propósito**: Liga usuários às cartas que eles possuem e registra a quantidade de cada carta.
+
+**Colunas**:
+- `id` (Integer, Chave Primária, Auto-incremento): O ID único do registro de inventário.
+- `user_id` (BigInteger, Chave Estrangeira para `users.id`, Não Nulo): O ID do usuário que possui a carta.
+- `card_id` (Integer, Chave Estrangeira para `cards.id`, Não Nulo): O ID da carta.
+- `quantity` (Integer, Padrão: 1): A quantidade dessa carta que o usuário possui.
+
+**Relacionamentos**:
+- Muitos-para-Um com a tabela `users` (via `user_id`)
+- Muitos-para-Um com a tabela `cards` (via `card_id`)
+
+---
+
+### Resumo dos Relacionamentos
+
+- Um **Usuário** (`users`) pode ter muitos registros no **Inventário** (`inventory`).
+- Uma **Carta** (`cards`) pode aparecer em muitos registros no **Inventário** (`inventory`).
+- A tabela **inventory** atua como uma relação **muitos-para-muitos** entre usuários e cartas, com um campo adicional `quantity` para rastrear quantas unidades de cada carta o usuário possui.
+
+=======================
 
 requirements.txt:
 aiogram==3.18.0

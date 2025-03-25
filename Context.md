@@ -110,29 +110,86 @@ This differs from the original flow which was more textual. It will be necessary
 $ tree -I "venv/"
 .
 ├── bot
-│   ├── commands
-│   │   ├── help.py
-│   │   ├── jornada.py
-│   │   └── start.py
-│   ├── __init__.py
-│   └── main.py
+│   ├── commands
+│   │   ├── help.py
+│   │   ├── jornada.py
+│   │   ├── mochila.py
+│   │   └── start.py
+│   ├── __init__.py
+│   └── main.py
+├── bot.log
 ├── Context.md
 ├── Contexto.md
 ├── database
-│   ├── crud_user.py
-│   ├── __init__.py
-│   ├── migrations
-│   ├── models.py
-│   ├── schema.sql
-│   └── session.py
+│   ├── crud_user.py
+│   ├── __init__.py
+│   ├── migrations
+│   ├── models.py
+│   ├── schema.sql
+│   ├── session.py
+│   └── test_db_connection.py
 ├── docs
 ├── Procfile
 ├── README.md
 ├── requirements.txt
 └── tests
 
-7 directories, 15 files
+7 directories, 18 files
+
 ```
+## Current Database Structure:
+
+### 1. Users Table (`users`)
+**Purpose**: Stores information about bot users.
+
+**Columns**:
+- `id` (BigInteger, Primary Key): The Telegram ID of the user.
+- `username` (String, Nullable): The Telegram username of the user.
+- `nickname` (String, Unique, Not Null): A unique nickname chosen by the user.
+- `coins` (Integer, Default: 0): The number of coins the user has.
+
+**Relationships**:
+- One-to-Many with `inventory` (via `Inventory.user_id`)
+
+---
+
+### 2. Cards Table (`cards`)
+**Purpose**: Stores information about collectible cards.
+
+**Columns**:
+- `id` (Integer, Primary Key, Auto-increment): The unique ID of the card.
+- `name` (String, Not Null): The name of the card.
+- `rarity` (String, Not Null): The rarity level of the card (e.g., *Common*, *Rare*).
+
+**Relationships**:
+- One-to-Many with `inventory` (via `Inventory.card_id`)
+
+---
+
+### 3. Inventory Table (`inventory`)
+**Purpose**: Links users to the cards they own and tracks the quantity of each card.
+
+**Columns**:
+- `id` (Integer, Primary Key, Auto-increment): The unique ID of the inventory record.
+- `user_id` (BigInteger, Foreign Key to `users.id`, Not Null): The ID of the user who owns the card.
+- `card_id` (Integer, Foreign Key to `cards.id`, Not Null): The ID of the card.
+- `quantity` (Integer, Default: 1): The number of this card the user owns.
+
+**Relationships**:
+- Many-to-One with `users` (via `user_id`)
+- Many-to-One with `cards` (via `card_id`)
+
+---
+
+### Relationships Summary
+
+- One **User** (`users`) can have many **Inventory** records (`inventory`).
+- One **Card** (`cards`) can appear in many **Inventory** records (`inventory`).
+- The **inventory** table acts as a **many-to-many** relationship between users and cards, with an additional `quantity` field to track how many of each card a user owns.
+
+
+
+
 
 ## requirements.txt:
 ```
