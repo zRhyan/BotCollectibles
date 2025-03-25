@@ -51,7 +51,9 @@ logging.basicConfig(
 dp.message.register(start_command, Command("start"))
 dp.message.register(help_command, Command("help"))
 
-# Include the jornada router
+#------------------------------------------------------
+# Register routers
+#------------------------------------------------------
 dp.include_router(jornada_router)
 dp.include_router(mochila_router)
 
