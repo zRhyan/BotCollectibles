@@ -1,6 +1,6 @@
 from aiogram import Router, types
 from aiogram.filters import Command
-from aiogram.types import ParseMode  # ✅ Corrected import
+from aiogram.enums import ParseMode  
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from database.models import Card

@@ -4,7 +4,7 @@ from sqlalchemy.future import select
 from sqlalchemy.sql import func
 from database.models import User, Card, Inventory
 from database.session import get_session
-from aiogram.types import ParseMode  # ✅ Corrected import
+from aiogram.enums import ParseMode 
 
 router = Router()
 

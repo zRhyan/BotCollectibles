@@ -7,7 +7,7 @@ from database.session import get_session
 from database.crud_user import get_user_by_id
 from database.crud_user import get_user_inventory  # Import the inventory query
 
-from aiogram.types import ParseMode  # For markdown
+from aiogram.enums import ParseMode  # For markdown
 
 router = Router()
 
