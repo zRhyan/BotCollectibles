@@ -25,7 +25,8 @@ class Card(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(50), nullable=False)
     rarity = Column(String(20), nullable=False)
-
+    image_file_id = Column(String(255), nullable=False)
+    
     # Relationship to inventory
     inventory = relationship("Inventory", back_populates="card")
 
