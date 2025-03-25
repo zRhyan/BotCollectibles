@@ -4,10 +4,11 @@ from aiogram.types import Message
 
 async def help_command(message: Message):
     help_text = (
-        "Os seguintes comandos estão disponíveis:\n"
-        "/start - Iniciar o bot\n"
-        "/help - Mostrar esta mensagem de ajuda\n"
-        "/jornada - Inscrever-se no bot\n"
-        "/mochila - Mostrar seu inventário\n"
+        "📜 **Comandos Disponíveis** 📜\n\n"
+        "🔹 `/start` - Iniciar o bot\n"
+        "🔹 `/help` - Mostrar esta mensagem de ajuda\n"
+        "🔹 `/jornada` - Inscrever-se no bot\n"
+        "🔹 `/mochila` - Mostrar seu inventário\n"
+        "🔹 `/pokebanco` - Ver o estado do seu PokéBanco\n"
     )
-    await message.answer(help_text)
+    await message.answer(help_text, parse_mode=types.ParseMode.MARKDOWN)
