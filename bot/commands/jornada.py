@@ -7,6 +7,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.enums import ParseMode
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.future import select
+from sqlalchemy.sql import func
 
 from database.session import get_session
 from database.crud_user import get_user_by_id, get_user_by_nickname, create_user
@@ -134,8 +135,12 @@ async def register_user(message: types.Message):
             return
 
         # Check if this is the first user
-        result = await session.execute(select(User.id).limit(1))
-        is_first_user = result.scalar_one_or_none() is None  # True if no users exist
+        result = await session.execute(select(func.count(User.id)))
+        user_count = result.scalar_one_or_none()  # Get the count of users
+        is_first_user = user_count == 0  # True if no users exist
+
+        print(f"User count: {user_count}")
+        print(f"Is first user: {is_first_user}")
 
         # Register the user
         new_user = User(
