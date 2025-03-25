@@ -32,7 +32,8 @@ The project is divided into two main parts:
 8.  ( ) /mute: Mute the bot
 9.  ( ) /ping: Check bot response time
 10. ( ) /addesp: Add tag
-11. ( ) /historico (player id): Display player's last 100 card history
+11. ( ) /historico (@nickname): Display player's last 100 card history
+12. ( ) /admin (@nickname)
 
 ### 3. General Commands
 1.  (X) /jornada: Register the person in the bot, requesting a unique @ for their profile.
