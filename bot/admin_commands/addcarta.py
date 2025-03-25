@@ -3,7 +3,7 @@ from aiogram.filters import Command
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from database.models import Card
-from database.session import async_session
+from database.session import get_session
 
 router = Router()
 
@@ -44,7 +44,7 @@ async def add_card(message: types.Message):
         return
 
     # Save the card in the database
-    async with async_session() as session:
+    async with get_session() as session: # Use get_session for session management
         # Check if the card already exists
         existing_card = await session.execute(select(Card).where(Card.name == card_name))
         if existing_card.scalar_one_or_none():
