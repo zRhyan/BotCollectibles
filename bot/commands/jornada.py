@@ -120,7 +120,7 @@ async def register_user(message: types.Message):
     nickname = message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else None
 
     if not nickname:
-        await message.reply("❗ **Erro:** Você precisa fornecer um nickname. Use o comando no formato `/jornada <nickname>`." 
+        await message.reply("❗ **Erro:** Você precisa fornecer um nickname. Use o comando no formato `/jornada <nickname>`.", 
                             parse_mode=ParseMode.MARKDOWN)
         return
 
