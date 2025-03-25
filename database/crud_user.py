@@ -1,6 +1,7 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import joinedload
 from .models import User
 from database.models import Inventory, Card
 
@@ -22,8 +23,11 @@ async def create_user(session, user_id, username, nickname):
         await session.rollback()
         return None
 
-async def get_user_inventory(session: AsyncSession, user_id: int):
+async def get_user_inventory(session, user_id):
     result = await session.execute(
-        select(Card).join(Inventory).where(Inventory.user_id == user_id)
+        select(Inventory, Card)
+        .join(Card, Inventory.card_id == Card.id)
+        .where(Inventory.user_id == user_id)
+        .options(joinedload(Inventory.card))  # Ensure relationships are loaded
     )
-    return result.scalars().all()
+    return result.all()  # Returns a list of tuples (Inventory, Card)

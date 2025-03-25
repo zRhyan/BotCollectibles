@@ -37,8 +37,9 @@ async def mochila_command(message: Message):
                 parse_mode=ParseMode.MARKDOWN
             )
         else:
+            # Adjust the list comprehension based on the structure of inventory
             inventory_text = "\n".join(
-                [f"🃏 **{card.name}** ×{item.quantity}" for card, item in inventory]
+                [f"🃏 **{item.card.name}** ×{item.quantity}" for item in inventory]
             )
 
             await message.answer(
