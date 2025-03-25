@@ -14,22 +14,22 @@ ADMIN_IDS = [123456789, 987654321]
 async def add_card(message: types.Message):
     # Check if the user is an admin
     if message.from_user.id not in ADMIN_IDS:
-        await message.reply("Você não tem permissão para usar este comando.")
+        await message.reply("🚫 **Acesso negado!** Somente administradores podem usar este comando.")
         return
 
     # Ensure the command is a reply to a message
     if not message.reply_to_message:
-        await message.reply("Por favor, responda a uma mensagem contendo a imagem e a legenda do card.")
+        await message.reply("❗ **Erro:** Responda a uma mensagem contendo a imagem e a legenda do card.")
         return
 
     # Ensure the replied message contains an image
     if not message.reply_to_message.photo:
-        await message.reply("A mensagem respondida deve conter uma imagem do card.")
+        await message.reply("❗ **Erro:** A mensagem respondida deve conter uma imagem do card.")
         return
 
     # Ensure the replied message contains a caption
     if not message.reply_to_message.caption:
-        await message.reply("A mensagem respondida deve conter uma legenda com o nome e a raridade do card.")
+        await message.reply("❗ **Erro:** A mensagem respondida deve conter uma legenda com o nome e a raridade do card.")
         return
 
     # Extract image file ID and caption
@@ -40,7 +40,7 @@ async def add_card(message: types.Message):
     try:
         card_name, rarity = map(str.strip, caption.split("|"))
     except ValueError:
-        await message.reply("A legenda deve estar no formato: `Nome do Card | Raridade`.")
+        await message.reply("⚠️ **Formato inválido!** A legenda deve estar no formato: `Nome do Card | Raridade`.")
         return
 
     # Save the card in the database
@@ -57,4 +57,4 @@ async def add_card(message: types.Message):
         await session.commit()
 
     # Confirm success
-    await message.reply(f"O card '{card_name}' foi adicionado com sucesso!")
+    await message.reply(f"✅ **Sucesso!** O card '{card_name}' foi adicionado ao sistema! 🃏✨")

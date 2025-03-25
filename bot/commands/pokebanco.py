@@ -18,20 +18,23 @@ async def pokebanco_command(message: Message):
         user = await get_user_by_id(session, user_id)
 
         if not user:
-            await message.answer("Você ainda não está registrado. Use /jornada para começar!")
+            await message.answer(
+                "❌ **Treinador não encontrado!** ❌\n\n"
+                "Parece que você ainda não começou sua jornada. Use `/jornada` para se registrar e começar sua aventura! 🚀"
+            )
             return
 
         # Retrieve user data
         coins = user.coins
-        # Add pokéballs and captures if they exist in the database
         pokeballs = getattr(user, "pokeballs", 0)  # Default to 0 if not present
         captures = getattr(user, "captures", 0)  # Default to 0 if not present
 
         # Send the response to the user
         await message.answer(
-            f"🏦 **PokéBanco** 🏦\n\n"
-            f"💰 Moedas: {coins}\n"
-            f"🎯 Pokébolas: {pokeballs}\n"
-            f"📸 Capturas: {captures}\n",
+            f"🏦 **Bem-vindo ao PokéBanco!** 🏦\n\n"
+            f"💰 **Moedas:** `{coins}`\n"
+            f"🎯 **Pokébolas:** `{pokeballs}`\n"
+            f"📸 **Capturas:** `{captures}`\n\n"
+            f"Continue sua jornada e acumule mais riquezas e conquistas! 🌟",
             parse_mode=ParseMode.MARKDOWN
         )
