@@ -13,6 +13,7 @@ class User(Base):
     coins = Column(Integer, default=0)
     pokeballs = Column(Integer, default=0)
     captures = Column(Integer, default=0)
+    is_admin = Column(Integer, default=0)  # 0 = Not Admin, 1 = Admin
 
     # Relationship to inventory
     inventory = relationship("Inventory", back_populates="user")

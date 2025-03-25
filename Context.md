@@ -22,17 +22,17 @@ The project is divided into two main parts:
 - Completista: 70k em diante
 
 ### 2. Admin Commands
-- /add: Add cards
-- /ban: Ban users from the bot
-- /addb: Add banners for sale in profile
-- /adds: Add stickers for sale in profile
-- /adddex: Add binder/collection models for sale in profile
-- /rclicar: Reload spins
-- /rcoins: Reload coins
-- /mute: Mute the bot
-- /ping: Check bot response time
-- /addesp: Add tag
-- /historico (player id): Display player's last 100 card history
+1.  (X) /add: Add cards
+2.  ( ) /ban: Ban users from the bot
+3.  ( ) /addb: Add banners for sale in profile
+4.  ( ) /adds: Add stickers for sale in profile
+5.  ( ) /adddex: Add binder/collection models for sale in profile
+6.  ( ) /rclicar: Reload spins
+7.  ( ) /rcoins: Reload coins
+8.  ( ) /mute: Mute the bot
+9.  ( ) /ping: Check bot response time
+10. ( ) /addesp: Add tag
+11. ( ) /historico (player id): Display player's last 100 card history
 
 ### 3. General Commands
 1.  (X) /jornada: Register the person in the bot, requesting a unique @ for their profile.
