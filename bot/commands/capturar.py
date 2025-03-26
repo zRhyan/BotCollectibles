@@ -179,13 +179,15 @@ async def handle_category_choice(callback: CallbackQuery):
         category_obj = await session.get(Category, category_id)
         category_name = category_obj.name if category_obj else "Desconhecida"
 
+        # Fetch the user's nickname
+        user_nickname = callback.from_user.username or "Treinador"
+
+        # Prepare the message caption
         caption = (
-            f"🎉 *Parabéns!* Você capturou:\n\n"
-            f"🆔 **ID**: {card.id}\n"
-            f"🃏 **Nome**: {card.name}\n"
-            f"📂 **Categoria**: {category_name}\n"
-            f"✨ **Raridade**: {card.rarity}\n\n"
-            f"🔑 Suas pokebolas restantes: {user.pokeballs}"
+            f"🎰 Que sorte, @{user_nickname}! você acabou de capturar um pokecard.\n\n"
+            f"{chosen_rarity}{card.id}. {card.name} (1x)\n"
+            f"📚 {category_name}\n\n"
+            f"🎒Pokébolas restantes: {user.pokeballs}"
         )
 
         # If you store card images via Telegram file_id
