@@ -84,6 +84,14 @@ dp.include_router(pokebola_router)
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
 dp.message.middleware(LoggingMiddleware())
 
+from functools import partial
+
+# Define or import pokebola_command
+from commands.pokebola import pokebola_command
+
+# Pass the bot instance to the pokebola router
+pokebola_router.message.middleware(partial(pokebola_command, bot=bot))
+
 #------------------------------------------------------
 # Bot command menu
 #------------------------------------------------------

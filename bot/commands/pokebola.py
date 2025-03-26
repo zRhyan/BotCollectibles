@@ -1,12 +1,11 @@
 from aiogram import Router, types
 from sqlalchemy.orm import Session
 from database.models import Card, Group, Category, Tag
-from bot import bot  # Assuming bot instance is initialized elsewhere
 
 router = Router()
 
 @router.message(commands=["pokebola", "pb"])
-async def pokebola_command(message: types.Message, session: Session):
+async def pokebola_command(message: types.Message, session: Session, bot):
     args = message.get_args()
     if not args:
         await message.reply("Please provide the ID or name of the card.")
