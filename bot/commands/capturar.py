@@ -79,7 +79,7 @@ async def capturar_command(message: types.Message):
             parse_mode=ParseMode.MARKDOWN
         )
 
-@capturar_router.callback_query(lambda call: call.data.startswith("choose_cat_"))
+@router.callback_query(lambda call: call.data.startswith("choose_cat_"))
 async def handle_category_choice(callback: CallbackQuery):
     """
     Handles the user tapping on a category button:
