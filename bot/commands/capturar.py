@@ -8,7 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from sqlalchemy import select, func
 from database.session import get_session
-from database.models import User, Card, Inventory, Category
+from database.models import User, Card, Inventory, Category, Group
 
 router = Router()
 
@@ -114,8 +114,6 @@ async def handle_category_choice(callback: CallbackQuery):
 
         # Deduct 1 pokebola
         user.pokeballs -= 1
-
-        # Save now, just in case
         await session.commit()
 
         # ---------- Step 2: Determine rarity by random probability ----------
@@ -130,10 +128,13 @@ async def handle_category_choice(callback: CallbackQuery):
         else:
             chosen_rarity = "Epic"
 
-        # ---------- Step 3: Get a random card in the chosen category & rarity ----------
+        # ---------- Step 3: Get a random card in that category + chosen rarity ----------
+        # Card has no category_id. Instead: Card -> group -> group.category_id
+        # So we join Card.group and filter by Group.category_id
         card_result = await session.execute(
             select(Card)
-            .where((Card.category_id == category_id) & (Card.rarity == chosen_rarity))
+            .join(Card.group)
+            .where(Group.category_id == category_id, Card.rarity == chosen_rarity)
             .order_by(func.random())
             .limit(1)
         )
@@ -143,7 +144,8 @@ async def handle_category_choice(callback: CallbackQuery):
         if not card:
             card_result = await session.execute(
                 select(Card)
-                .where(Card.category_id == category_id)
+                .join(Card.group)
+                .where(Group.category_id == category_id)
                 .order_by(func.random())
                 .limit(1)
             )
@@ -188,8 +190,8 @@ async def handle_category_choice(callback: CallbackQuery):
         )
 
         # If you store card images via Telegram file_id
-        # or if you have an external URL
         if card.image_file_id:
+            # We'll edit the same message to show the card image
             await callback.message.edit_media(
                 media=types.InputMediaPhoto(
                     media=card.image_file_id,
