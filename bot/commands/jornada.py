@@ -86,13 +86,8 @@ async def handle_confirmation(callback: CallbackQuery, state: FSMContext):
                 # Check if the user is in the predefined admin list
                 is_predefined_admin = username in PREDEFINED_ADMINS
 
-                # Count how many users exist
-                result = await session.execute(select(func.count(User.id)))
-                user_count = result.scalar_one_or_none() or 0
-                is_first_user = (user_count == 0)
-
                 # Determine if the user should be an admin
-                is_admin = 1 if is_first_user or is_predefined_admin else 0
+                is_admin = 1 if is_predefined_admin else 0
 
                 # Create the new user
                 new_user = User(
