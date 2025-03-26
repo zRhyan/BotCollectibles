@@ -4,6 +4,7 @@ import random
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
+from aiogram.types import InputMediaPhoto
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from sqlalchemy import select, func
@@ -195,7 +196,8 @@ async def handle_category_choice(callback: CallbackQuery):
             await callback.message.edit_media(
                 media=types.InputMediaPhoto(
                     media=card.image_file_id,
-                    caption=caption
+                    caption=caption,
+                    parse_mode=ParseMode.MARKDOWN
                 ),
                 reply_markup=None
             )
