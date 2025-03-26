@@ -67,6 +67,8 @@ logging.basicConfig(
         logging.StreamHandler()
     ]
 )
+# Set the logging level for the middleware
+logging.getLogger("bot.middleware").setLevel(logging.INFO)
 
 # Register commands
 dp.message.register(start_command, Command("start"))
