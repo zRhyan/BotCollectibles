@@ -103,12 +103,12 @@ async def set_bot_commands(bot: Bot):
 
 # Run the bot
 async def main():
-    # Uncomment this when you don't want to reset the database
-    # await create_db()
-    # print("Database schema created successfully!")
+    # Comment this if you want to reset the database schema
+    await create_db()
+    print("Database schema created successfully!")
 
-    # Recreate the database schema. Comment this later.
-    await recreate_database()
+    # Recreate the database schema. Uncomment this if you want to reset the database schema
+    # await recreate_database()
 
     # Set bot commands
     await set_bot_commands(bot)
