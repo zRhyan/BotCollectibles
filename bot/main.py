@@ -78,7 +78,6 @@ dp.include_router(pokebanco_router)
 dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
 dp.include_router(admin_router)
-dp.include_router(pokebola_router)  
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
