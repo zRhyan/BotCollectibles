@@ -164,7 +164,8 @@ async def handle_confirmation(callback: CallbackQuery, state: FSMContext):
                     id=user_id,
                     username=username,
                     nickname=nickname,
-                    is_admin=1 if is_first_user else 0
+                    is_admin=1 if is_first_user else 0,
+                    pokeballs=3  # Set initial pokeballs to 3
                 )
                 session.add(new_user)
                 await session.commit()
