@@ -2,6 +2,7 @@ from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from aiogram.enums import ParseMode
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select
 from database.session import get_session
 from database.models import Inventory, Card, Group, Category, User
@@ -102,30 +103,34 @@ async def send_mochila_page(
         f"Página {page}/{total_pages}"
     )
 
-    # Build pagination keyboard
-    keyboard = InlineKeyboardMarkup(row_width=2)
+    # Build pagination keyboard using InlineKeyboardBuilder
+    keyboard = InlineKeyboardBuilder()
+
     if page > 1:
-        keyboard.insert(InlineKeyboardButton(
+        keyboard.button(
             text="⬅️ Anterior",
             callback_data=MOCHILA_CALLBACK.format(page=page - 1)
-        ))
+        )
+
     if page < total_pages:
-        keyboard.insert(InlineKeyboardButton(
+        keyboard.button(
             text="Próximo ➡️",
             callback_data=MOCHILA_CALLBACK.format(page=page + 1)
-        ))
+        )
+
+    keyboard.adjust(2)  # set 2 buttons per row
 
     # If the call is from a callback, use edit_text; else use answer()
     if isinstance(message_or_callback, CallbackQuery):
         await message_or_callback.message.edit_text(
             text,
-            reply_markup=keyboard,
+            reply_markup=keyboard.as_markup(),
             parse_mode=ParseMode.MARKDOWN
         )
     else:
         await message_or_callback.answer(
             text,
-            reply_markup=keyboard,
+            reply_markup=keyboard.as_markup(),
             parse_mode=ParseMode.MARKDOWN
         )
 

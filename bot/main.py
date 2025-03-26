@@ -96,7 +96,6 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="pokebanco", description="Ver suas moedas e pokébolas"),
         BotCommand(command="capturar", description="Capturar um card"),
         BotCommand(command="addcarta", description="Adicionar um novo card (admin)"),
-        BotCommand(command="admin", description="Promover um usuário a admin"),
         BotCommand(command="pokebola", description="Exibir informações sobre um card"),
     ]
     await bot.set_my_commands(commands)
