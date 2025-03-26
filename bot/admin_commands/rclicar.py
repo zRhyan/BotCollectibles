@@ -11,7 +11,7 @@ router = Router()
 async def reset_pokeballs_command(message: types.Message):
     """
     Admin command to reset a user's Pokéballs to 10.
-    Usage: /rclicar <user_id>
+    Usage: /rclicar <nickname>
     """
     # Check if the user is an admin
     async with get_session() as session:
@@ -29,29 +29,22 @@ async def reset_pokeballs_command(message: types.Message):
     text_parts = message.text.split(maxsplit=1)
     if len(text_parts) < 2:
         await message.reply(
-            "❗ **Erro:** Você precisa fornecer o ID do usuário.\n"
-            "Exemplo: `/rclicar 123456789`",
+            "❗ **Erro:** Você precisa fornecer o nickname do usuário.\n"
+            "Exemplo: `/rclicar nickname`",
             parse_mode=ParseMode.MARKDOWN
         )
         return
 
-    try:
-        user_id = int(text_parts[1])
-    except ValueError:
-        await message.reply(
-            "❗ **Erro:** O ID do usuário deve ser um número válido.",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
+    nickname = text_parts[1].strip()
 
     # Reset the user's Pokéballs
     async with get_session() as session:
-        result = await session.execute(select(User).where(User.id == user_id))
+        result = await session.execute(select(User).where(User.nickname == nickname))
         user = result.scalar_one_or_none()
 
         if not user:
             await message.reply(
-                f"❌ **Erro:** Nenhum usuário encontrado com o ID `{user_id}`.",
+                f"❌ **Erro:** Nenhum usuário encontrado com o nickname `{nickname}`.",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
@@ -61,6 +54,6 @@ async def reset_pokeballs_command(message: types.Message):
         await session.commit()
 
         await message.reply(
-            f"✅ **Sucesso!** As Pokébolas do usuário `{user_id}` foram resetadas para 10.",
+            f"✅ **Sucesso!** As Pokébolas do usuário `{nickname}` foram resetadas para 10.",
             parse_mode=ParseMode.MARKDOWN
         )
