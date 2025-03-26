@@ -72,6 +72,7 @@ dp.message.register(help_command, Command("help"))
 #------------------------------------------------------
 # Register routers
 #------------------------------------------------------
+dp.include_router(jornada_router)
 dp.include_router(mochila_router)
 dp.include_router(pokebanco_router)
 dp.include_router(capturar_router)
@@ -89,12 +90,6 @@ from commands.pokebola import pokebola_command
 
 # Pass the bot instance to the pokebola router
 pokebola_router.message.middleware(partial(pokebola_command, bot=bot))
-
-# Import jornada_command
-from commands.jornada import jornada_command
-
-# Pass the bot instance to the jornada router
-jornada_router.message.middleware(partial(jornada_command, bot=bot))
 
 #------------------------------------------------------
 # Bot command menu
