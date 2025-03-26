@@ -3,6 +3,7 @@ import logging
 import sys
 import os
 from aiogram import Bot, Dispatcher
+from aiogram.types import BotCommand
 from aiogram.filters import Command
 from dotenv import load_dotenv
 
@@ -83,7 +84,22 @@ dp.include_router(pokebola_router)
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
 dp.message.middleware(LoggingMiddleware())
 
-
+#------------------------------------------------------
+# Bot command menu
+#------------------------------------------------------
+async def set_bot_commands(bot: Bot):
+    commands = [
+        BotCommand(command="start", description="Iniciar o bot"),
+        BotCommand(command="help", description="Obter ajuda sobre os comandos"),
+        BotCommand(command="jornada", description="Registrar-se no bot"),
+        BotCommand(command="mochila", description="Ver sua mochila"),
+        BotCommand(command="pokebanco", description="Ver suas moedas e pokébolas"),
+        BotCommand(command="capturar", description="Capturar um card"),
+        BotCommand(command="addcarta", description="Adicionar um novo card (admin)"),
+        BotCommand(command="admin", description="Promover um usuário a admin"),
+        BotCommand(command="pokebola", description="Exibir informações sobre um card"),
+    ]
+    await bot.set_my_commands(commands)
 
 # Run the bot
 async def main():
@@ -93,6 +109,10 @@ async def main():
 
     # Recreate the database schema. Comment this later.
     await recreate_database()
+
+    # Set bot commands
+    await set_bot_commands(bot)
+
     # Start polling
     await dp.start_polling(bot)
 
