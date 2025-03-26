@@ -89,7 +89,12 @@ dp.message.middleware(LoggingMiddleware())
 #------------------------------------------------------
 # Bot command menu
 #------------------------------------------------------
+from sqlalchemy.future import select
+from database.session import get_session
+from database.models import User
+
 async def set_bot_commands(bot: Bot):
+    # General commands for all users
     commands = [
         BotCommand(command="start", description="Iniciar o bot"),
         BotCommand(command="help", description="Obter ajuda sobre os comandos"),
@@ -97,10 +102,28 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="mochila", description="Ver sua mochila"),
         BotCommand(command="pokebanco", description="Ver suas moedas e pokébolas"),
         BotCommand(command="capturar", description="Capturar um card"),
-        BotCommand(command="addcarta", description="Adicionar um novo card (admin)"),
         BotCommand(command="pokebola", description="Exibir informações sobre um card"),
     ]
     await bot.set_my_commands(commands)
+
+    # Admin-specific commands
+    admin_commands = [
+        BotCommand(command="addcarta", description="Adicionar uma nova carta"),
+        BotCommand(command="rclicar", description="Reiniciar cliques de um usuário"),
+    ]
+
+    # Fetch the list of admin users from the database
+    async with get_session() as session:
+        result = await session.execute(select(User).where(User.is_admin == 1))
+        admin_users = result.scalars().all()
+
+    # Assign admin commands to each admin user
+    for admin in admin_users:
+        try:
+            await bot.set_my_commands(admin_commands, scope={"type": "chat", "chat_id": admin.id})
+            logging.info(f"Admin commands set for user {admin.id} (@{admin.username})")
+        except Exception as e:
+            logging.error(f"Failed to set admin commands for user {admin.id}: {e}")
 
 # Run the bot
 async def main():
