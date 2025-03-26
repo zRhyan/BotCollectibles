@@ -18,6 +18,7 @@ from commands.pokebanco import router as pokebanco_router
 from commands.capturar import router as capturar_router
 from admin_commands.addcarta import router as addcarta_router
 from commands.admin import router as admin_router
+from commands.pokebola import router as pokebola_router
 
 # Import the database 
 from database.models import Base
@@ -76,6 +77,7 @@ dp.include_router(pokebanco_router)
 dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
 dp.include_router(admin_router)
+dp.include_router(pokebola_router)  
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))

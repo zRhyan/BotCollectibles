@@ -44,7 +44,7 @@ The project is divided into two main parts:
 6.  ( ) /pokedex or /pd: Show the collection/album.
 7.  ( ) /explorar: Get a free card every 12h (or defined period).
 8.  ( ) /pokemart or /pokem: Store for purchasing event cards, stickers, banners.
-9.  ( ) /pokebanco: Display coins (pokécoins), captures, and pokéballs.
+9.  (X) /pokebanco: Display coins (pokécoins), captures, and pokéballs.
 10. ( ) /doar: Donate cards or captures to another player.
 11. ( ) /roubar or /r: Trading cards between players, with confirmation.
 12. ( ) /ginasio: Show ranking of who has more cards of a specific type.
