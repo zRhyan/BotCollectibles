@@ -19,8 +19,12 @@ from commands.capturar import router as capturar_router
 from admin_commands.addcarta import router as addcarta_router
 from commands.admin import router as admin_router
 
+# Import the database 
 from database.models import Base
 from database.session import engine
+
+# Middleware imports
+from middlewares.logging_middleware import LoggingMiddleware
 
 #------------------------------------------------------
 # Teporary function to recreate the database schema
@@ -77,6 +81,9 @@ dp.include_router(pokebanco_router)
 dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
 dp.include_router(admin_router)
+# Register the middleware
+dp.update.middleware(LoggingMiddleware())
+
 
 
 # Run the bot
