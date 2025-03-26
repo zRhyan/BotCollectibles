@@ -10,9 +10,9 @@ from sqlalchemy import select, func
 from database.session import get_session
 from database.models import User, Card, Inventory, Category
 
-capturar_router = Router()
+router = Router()
 
-@capturar_router.message(Command(commands=["cap", "capturar"]))
+@router.message(Command(commands=["cap", "capturar"]))
 async def capturar_command(message: types.Message):
     """
     Handles the initial /cap or /capturar command.
