@@ -112,7 +112,7 @@ async def add_card(message: types.Message):
             await session.flush()  # Ensure the card ID is available
 
             # Associate the card with the tag
-            session.execute(card_tags.insert().values(card_id=new_card.id, tag_id=tag.id))
+            await session.execute(card_tags.insert().values(card_id=new_card.id, tag_id=tag.id))
 
             await session.commit()
 
