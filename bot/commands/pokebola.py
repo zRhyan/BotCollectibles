@@ -1,39 +1,46 @@
 from aiogram import Router, types
-from sqlalchemy.orm import Session
+from aiogram.filters import Command
+from sqlalchemy.future import select
 from database.models import Card, Group, Category, Tag
 
 router = Router()
 
-@router.message(commands=["pokebola", "pb"])
-async def pokebola_command(message: types.Message, session: Session, bot):
+@router.message(Command(commands=["pokebola", "pb"]))
+async def pokebola_command(message: types.Message, session):
     args = message.get_args()
     if not args:
-        await message.reply("Please provide the ID or name of the card.")
+        await message.reply("❗ **Erro:** Forneça o ID ou nome do card.", parse_mode=types.ParseMode.MARKDOWN)
         return
 
     # Query card by ID or name
-    card = session.query(Card).filter(
-        (Card.id == args) | (Card.name.ilike(f"%{args}%"))
-    ).first()
+    result = await session.execute(
+        select(Card).where((Card.id == args) | (Card.name.ilike(f"%{args}%")))
+    )
+    card = result.scalar_one_or_none()
 
     if not card:
-        await message.reply("Card not found.")
+        await message.reply("❌ **Erro:** Card não encontrado.", parse_mode=types.ParseMode.MARKDOWN)
         return
 
     # Fetch related details
-    group = session.query(Group).filter(Group.id == card.group_id).first()
-    category = session.query(Category).filter(Category.id == group.category_id).first()
-    tags = ", ".join(tag.name for tag in card.tags)
+    group_result = await session.execute(select(Group).where(Group.id == card.group_id))
+    group = group_result.scalar_one_or_none()
+
+    category_result = await session.execute(select(Category).where(Category.id == group.category_id))
+    category = category_result.scalar_one_or_none()
+
+    tags_result = await session.execute(select(Tag).join(card.tags))
+    tags = ", ".join(tag.name for tag in tags_result.scalars())
 
     # Prepare caption
     caption = (
-        f"ID: {card.id}\n"
-        f"Name: {card.name}\n"
-        f"Category: {category.name}\n"
-        f"Group: {group.name}\n"
-        f"Rarity: {card.rarity}\n"
-        f"Tags: {tags if tags else 'None'}"
+        f"🆔 **ID:** {card.id}\n"
+        f"🃏 **Nome:** {card.name}\n"
+        f"📂 **Categoria:** {category.name}\n"
+        f"📁 **Grupo:** {group.name}\n"
+        f"✨ **Raridade:** {card.rarity}\n"
+        f"🏷️ **Tags:** {tags if tags else 'Nenhuma'}"
     )
 
     # Send card image with caption
-    await bot.send_photo(chat_id=message.chat.id, photo=card.image_file_id, caption=caption)
+    await message.answer_photo(photo=card.image_file_id, caption=caption, parse_mode=types.ParseMode.MARKDOWN)
