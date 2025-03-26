@@ -72,7 +72,6 @@ dp.message.register(help_command, Command("help"))
 #------------------------------------------------------
 # Register routers
 #------------------------------------------------------
-dp.include_router(jornada_router)
 dp.include_router(mochila_router)
 dp.include_router(pokebanco_router)
 dp.include_router(capturar_router)

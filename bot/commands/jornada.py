@@ -35,7 +35,7 @@ class JornadaStates(StatesGroup):
 
 
 @router.message(Command("jornada"))
-async def jornada_command(message: Message, state: FSMContext, bot: Bot):
+async def jornada_command(message: Message, state: FSMContext):
     """
     Entry point for /jornada command.
     1. Check if user is already registered.
@@ -44,6 +44,9 @@ async def jornada_command(message: Message, state: FSMContext, bot: Bot):
     """
     user_id = message.from_user.id
     username = message.from_user.username or "Usuário sem @"
+
+    # Access the bot instance from the message object
+    bot = message.bot
 
     # Check if the user is a member of @pokunews
     try:
