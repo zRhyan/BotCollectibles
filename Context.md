@@ -39,7 +39,7 @@ The project is divided into two main parts:
 1.  (X) /jornada: Register the person in the bot, requesting a unique @ for their profile.
 2.  (X) /cap or /capturar: Spin/capture a card (using pokéballs).
 3.  ( ) /evoluir or /ev: Evolve/customize a card (upon reaching certain card quantity milestones).
-4.  ( ) /pokebola or /pb: Display a specific card (by ID or name).
+4.  (X) /pokebola or /pb: Display a specific card (by ID or name).
 5.  (X) /mochila: Show the player's complete inventory.
 6.  ( ) /pokedex or /pd: Show the collection/album.
 7.  ( ) /explorar: Get a free card every 12h (or defined period).
