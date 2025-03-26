@@ -6,9 +6,9 @@ from sqlalchemy import select
 from database.session import get_session
 from database.models import Card, Group, Category, Tag
 
-pokebola_router = Router()
+router = Router()
 
-@pokebola_router.message(Command(commands=["pokebola", "pb"]))
+@router.message(Command(commands=["pokebola", "pb"]))
 async def pokebola_command(message: types.Message):
     """
     Handles the /pokebola (or /pb) command.
