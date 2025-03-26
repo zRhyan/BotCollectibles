@@ -68,7 +68,7 @@ logging.basicConfig(
     ]
 )
 # Set the logging level for the middleware
-logging.getLogger("bot.middleware").setLevel(logging.INFO)
+logging.getLogger("aiogram.event").setLevel(logging.INFO)
 
 # Register commands
 dp.message.register(start_command, Command("start"))
@@ -84,7 +84,7 @@ dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
 dp.include_router(admin_router)
 # Register the middleware
-dp.update.middleware(LoggingMiddleware())
+dp.message.middleware(LoggingMiddleware())
 
 
 
