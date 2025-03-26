@@ -78,18 +78,11 @@ dp.include_router(pokebanco_router)
 dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
 dp.include_router(admin_router)
+dp.include_router(pokebola_router)
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
 dp.message.middleware(LoggingMiddleware())
-
-from functools import partial
-
-# Import pokebola_command
-from commands.pokebola import pokebola_command
-
-# Pass the bot instance to the pokebola router
-pokebola_router.message.middleware(partial(pokebola_command, bot=bot))
 
 #------------------------------------------------------
 # Bot command menu
