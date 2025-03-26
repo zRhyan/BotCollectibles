@@ -85,11 +85,17 @@ dp.message.middleware(LoggingMiddleware())
 
 from functools import partial
 
-# Define or import pokebola_command
+# Import pokebola_command
 from commands.pokebola import pokebola_command
 
 # Pass the bot instance to the pokebola router
 pokebola_router.message.middleware(partial(pokebola_command, bot=bot))
+
+# Import jornada_command
+from commands.jornada import jornada_command
+
+# Pass the bot instance to the jornada router
+jornada_router.message.middleware(partial(jornada_command, bot=bot))
 
 #------------------------------------------------------
 # Bot command menu

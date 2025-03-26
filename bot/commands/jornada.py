@@ -10,7 +10,7 @@ Key points:
 """
 
 import asyncio
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -35,14 +35,33 @@ class JornadaStates(StatesGroup):
 
 
 @router.message(Command("jornada"))
-async def jornada_command(message: Message, state: FSMContext):
+async def jornada_command(message: Message, state: FSMContext, bot: Bot):
     """
     Entry point for /jornada command.
     1. Check if user is already registered.
-    2. If registered, notify; else prompt for a nickname.
+    2. Verify if the user is a member of @pokucardsbot.
+    3. If registered, notify; else prompt for a nickname.
     """
     user_id = message.from_user.id
     username = message.from_user.username or "Usuário sem @"
+
+    # Check if the user is a member of @pokucardsbot
+    try:
+        member = await bot.get_chat_member("@pokucardsbot", user_id)
+        if member.status not in ["member", "administrator", "creator"]:
+            await message.answer(
+                "⚠️ Você precisa ser membro do [Instituto de Informações de Pokedéx](https://t.me/pokucardsbot) "
+                "para se registrar no bot. Por favor, entre no canal e tente novamente.",
+                parse_mode="Markdown"
+            )
+            return
+    except Exception:
+        await message.answer(
+            "⚠️ Não foi possível verificar sua associação ao [Instituto de Informações de Pokedéx](https://t.me/pokucardsbot). "
+            "Por favor, entre no canal e tente novamente.",
+            parse_mode="Markdown"
+        )
+        return
 
     async with get_session() as session:
         # Check if the user is already registered in the DB
