@@ -39,25 +39,25 @@ async def jornada_command(message: Message, state: FSMContext, bot: Bot):
     """
     Entry point for /jornada command.
     1. Check if user is already registered.
-    2. Verify if the user is a member of @pokucardsbot.
+    2. Verify if the user is a member of @pokunews.
     3. If registered, notify; else prompt for a nickname.
     """
     user_id = message.from_user.id
     username = message.from_user.username or "Usuário sem @"
 
-    # Check if the user is a member of @pokucardsbot
+    # Check if the user is a member of @pokunews
     try:
-        member = await bot.get_chat_member("@pokucardsbot", user_id)
+        member = await bot.get_chat_member("@pokunews", user_id)
         if member.status not in ["member", "administrator", "creator"]:
             await message.answer(
-                "⚠️ Você precisa ser membro do [Instituto de Informações de Pokedéx](https://t.me/pokucardsbot) "
+                "⚠️ Você precisa ser membro do [Instituto de Informações de Pokedéx](https://t.me/pokunews) "
                 "para se registrar no bot. Por favor, entre no canal e tente novamente.",
                 parse_mode="Markdown"
             )
             return
     except Exception:
         await message.answer(
-            "⚠️ Não foi possível verificar sua associação ao [Instituto de Informações de Pokedéx](https://t.me/pokucardsbot). "
+            "⚠️ Não foi possível verificar sua associação ao [Instituto de Informações de Pokedéx](https://t.me/pokunews). "
             "Por favor, entre no canal e tente novamente.",
             parse_mode="Markdown"
         )
