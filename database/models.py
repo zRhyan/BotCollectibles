@@ -19,6 +19,46 @@ class User(Base):
     inventory = relationship("Inventory", back_populates="user")
 
 
+class Category(Base):
+    __tablename__ = "categories"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(50), nullable=False, unique=True)
+
+    # Relationship to groups
+    groups = relationship("Group", back_populates="category")
+
+
+class Group(Base):
+    __tablename__ = "groups"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(50), nullable=False)
+    category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+
+    # Relationships
+    category = relationship("Category", back_populates="groups")
+    cards = relationship("Card", back_populates="group")
+
+
+class Tag(Base):
+    __tablename__ = "tags"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(50), nullable=False, unique=True)
+
+    # Relationship to cards
+    cards = relationship("Card", secondary="card_tags", back_populates="tags")
+
+
+# Association table for many-to-many relationship between Card and Tag
+card_tags = Table(
+    "card_tags",
+    Base.metadata,
+    Column("card_id", Integer, ForeignKey("cards.id"), primary_key=True),
+    Column("tag_id", Integer, ForeignKey("tags.id"), primary_key=True),
+)
+
 class Card(Base):
     __tablename__ = "cards"
 
@@ -26,9 +66,12 @@ class Card(Base):
     name = Column(String(50), nullable=False)
     rarity = Column(String(20), nullable=False)
     image_file_id = Column(String(255), nullable=False)
-    
-    # Relationship to inventory
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
+
+    # Relationships
     inventory = relationship("Inventory", back_populates="card")
+    group = relationship("Group", back_populates="cards")
+    tags = relationship("Tag", secondary="card_tags", back_populates="cards")
 
 
 class Inventory(Base):

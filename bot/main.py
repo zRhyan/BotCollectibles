@@ -25,19 +25,12 @@ from database.session import engine
 
 # Middleware imports
 from middlewares.logging_middleware import LoggingMiddleware
+from middlewares.anti_flood_middleware import AntiFloodMiddleware
 
 #------------------------------------------------------
 # Teporary function to recreate the database schema
 #------------------------------------------------------
 from database.init_db import recreate_database
-async def recreate_database():
-    try:
-        async with engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-            await conn.run_sync(Base.metadata.create_all)
-        print("✅ Database schema dropped and recreated.")
-    except Exception as e:
-        print(f"Failed to recreate database schema: {e}")
 
 # Function to create the database schema
 async def create_db():
@@ -83,14 +76,16 @@ dp.include_router(pokebanco_router)
 dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
 dp.include_router(admin_router)
+
 # Register the middleware
+dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
 dp.message.middleware(LoggingMiddleware())
 
 
 
 # Run the bot
 async def main():
-    # Uncomment this when you don't wuant to reset the database
+    # Uncomment this when you don't want to reset the database
     # await create_db()
     # print("Database schema created successfully!")
 
