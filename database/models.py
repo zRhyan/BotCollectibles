@@ -64,7 +64,7 @@ class Card(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(50), nullable=False)
-    rarity = Column(String(20), nullable=False)
+    rarity = Column(String(10), nullable=False)  # Adjusted length for emojis
     image_file_id = Column(String(255), nullable=False)
     group_id = Column(Integer, ForeignKey("groups.id"), nullable=False)
 

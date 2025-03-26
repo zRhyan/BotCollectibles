@@ -118,16 +118,14 @@ async def handle_category_choice(callback: CallbackQuery):
         await session.commit()
 
         # ---------- Step 2: Determine rarity by random probability ----------
-        # e.g. common=40%, uncommon=30%, rare=20%, epic=10%
+        # 🥉 = 50%, 🥈 = 30%, 🥇 = 20%
         roll = random.random()  # 0.0 <= roll < 1.0
-        if roll < 0.40:
-            chosen_rarity = "Common"
-        elif roll < 0.70:
-            chosen_rarity = "Uncommon"
-        elif roll < 0.90:
-            chosen_rarity = "Rare"
+        if roll < 0.50:
+            chosen_rarity = "🥉"
+        elif roll < 0.80:
+            chosen_rarity = "🥈"
         else:
-            chosen_rarity = "Epic"
+            chosen_rarity = "🥇"
 
         # ---------- Step 3: Get a random card in that category + chosen rarity ----------
         # Card has no category_id. Instead: Card -> group -> group.category_id
