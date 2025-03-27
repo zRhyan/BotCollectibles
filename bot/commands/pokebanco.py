@@ -25,7 +25,8 @@ async def pokebanco_command(message: Message):
             .options(joinedload(User.inventory))  # Eagerly load the inventory relationship
             .where(User.id == user_id)
         )
-        user = result.scalar_one_or_none()
+        # Use .unique() to remove duplicates caused by joined eager loads
+        user = result.unique().scalar_one_or_none()
 
         if not user:
             await message.answer(
