@@ -10,6 +10,9 @@ router = Router()
 
 @router.message(Command(commands=["addcarta", "add"]))
 async def add_card(message: types.Message):
+    """
+    Handles the /addcarta command to add a new card.
+    """
     # Check if the user is an admin
     async with get_session() as session:
         result = await session.execute(select(User).where(User.id == message.from_user.id))
@@ -54,13 +57,18 @@ async def add_card(message: types.Message):
     try:
         # Replace commas with pipes to standardize the delimiter
         caption = caption.replace(",", "|")
-        card_name, group_name, category_name, tag_name, rarity = map(str.strip, caption.split("|"))
+        parts = list(map(str.strip, caption.split("|")))
+
+        # Ensure the required fields are present
+        if len(parts) < 4:
+            raise ValueError("Missing required fields in the caption.")
+
+        card_name, group_name, category_name, rarity = parts[:4]
+        tag_name = parts[4] if len(parts) > 4 else None  # Optional tag
     except ValueError:
         await message.reply(
             "⚠️ **Formato inválido!** A legenda deve estar no formato:\n"
-            "`nome do card | nome do grupo | nome da categoria | tag | raridade`\n"
-            "ou\n"
-            "`nome do card, nome do grupo, nome da categoria, tag, raridade`\n"
+            "`nome do card | nome do grupo | nome da categoria | raridade [| tag opcional]`\n"
             "⚠️ **Importante:**\n"
             "- Raridades permitidas: 🥇, 🥈, 🥉 (para cards normais) e 💎 (para cards de eventos).",
             parse_mode=ParseMode.MARKDOWN
@@ -96,19 +104,21 @@ async def add_card(message: types.Message):
                 session.add(group)
                 await session.flush()  # Ensure the group ID is available
 
-            # Ensure the tag exists (fix for duplicate tags)
-            result = await session.execute(select(Tag).where(Tag.name == tag_name))
-            tag = result.scalar_one_or_none()
-            if not tag:
-                tag = Tag(name=tag_name)
-                session.add(tag)
-                await session.flush()  # Ensure the tag ID is available
+            # Ensure the tag exists (if provided)
+            tag = None
+            if tag_name:
+                result = await session.execute(select(Tag).where(Tag.name == tag_name))
+                tag = result.scalar_one_or_none()
+                if not tag:
+                    tag = Tag(name=tag_name)
+                    session.add(tag)
+                    await session.flush()  # Ensure the tag ID is available
 
             # Check if the card already exists
             result = await session.execute(select(Card).where(Card.name == card_name))
             if result.scalar_one_or_none():
                 await message.reply(
-                    "Um card com este nome já existe no sistema.",
+                    "❌ **Erro:** Um card com este nome já existe no sistema.",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
@@ -123,8 +133,9 @@ async def add_card(message: types.Message):
             session.add(new_card)
             await session.flush()  # Ensure the card ID is available
 
-            # Associate the card with the tag
-            await session.execute(card_tags.insert().values(card_id=new_card.id, tag_id=tag.id))
+            # Associate the card with the tag (if provided)
+            if tag:
+                await session.execute(card_tags.insert().values(card_id=new_card.id, tag_id=tag.id))
 
             await session.commit()
 

@@ -17,11 +17,13 @@ from commands.jornada import router as jornada_router
 from commands.mochila import router as mochila_router
 from commands.pokebanco import router as pokebanco_router
 from commands.capturar import router as capturar_router
-from admin_commands.addcarta import router as addcarta_router
 from commands.admin import router as admin_router
 from commands.pokebola import router as pokebola_router
-from admin_commands.rclicar import router as rclicar_router
 from commands.pokemart import router as pokemart_router
+
+from admin_commands.addcarta import router as addcarta_router
+from admin_commands.rclicar import router as rclicar_router
+from admin_commands.rcoins import router as rcoins_router
 
 # Import the database 
 from database.models import Base
@@ -82,7 +84,9 @@ dp.include_router(addcarta_router)
 dp.include_router(admin_router)
 dp.include_router(pokebola_router)
 dp.include_router(rclicar_router)
+dp.include_router(rcoins_router)
 dp.include_router(pokemart_router)
+
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
@@ -113,6 +117,7 @@ async def set_bot_commands(bot: Bot):
     admin_commands = [
         BotCommand(command="addcarta", description="(Admin) Adicionar uma nova carta"),
         BotCommand(command="rclicar", description="(Admin) Distribuir pokébolas"),
+        BotCommand(command="rcoins", description="(Admin) Distribuir moedas"),
         BotCommand(command="start", description="Iniciar o bot"),
         BotCommand(command="help", description="Obter ajuda sobre os comandos"),
         BotCommand(command="jornada", description="Registrar-se no bot"),

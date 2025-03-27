@@ -177,9 +177,9 @@ async def pokemart_pokebolas(callback: types.CallbackQuery):
         "Selecione a opção desejada:"
     )
     keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="10 Pokébolas - 50 moedas", callback_data="buy_pokebolas_10")
-    keyboard.button(text="25 Pokébolas - 100 moedas", callback_data="buy_pokebolas_25")
-    keyboard.button(text="50 Pokébolas - 180 moedas", callback_data="buy_pokebolas_50")
+    keyboard.button(text="10 Pokebolas - 50 moedas", callback_data="buy_pokebolas_10")
+    keyboard.button(text="25 Pokebolas - 100 moedas", callback_data="buy_pokebolas_25")
+    keyboard.button(text="50 Pokebolas - 180 moedas", callback_data="buy_pokebolas_50")
     keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
     keyboard.adjust(1)
 
