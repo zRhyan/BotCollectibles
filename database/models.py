@@ -12,12 +12,19 @@ class User(Base):
     nickname = Column(String(20), unique=True, nullable=False)
     coins = Column(Integer, default=0)
     pokeballs = Column(Integer, default=0)
-    captures = Column(Integer, default=0)
     is_admin = Column(Integer, default=0)  # 0 = Not Admin, 1 = Admin
 
     # Relationship to inventory
     inventory = relationship("Inventory", back_populates="user")
     marketplace_listings = relationship("Marketplace", back_populates="seller")
+
+    @property
+    def captures(self):
+        """
+        Dynamically calculate the total captures for the user.
+        This is the sum of all card quantities in the user's inventory.
+        """
+        return sum(item.quantity for item in self.inventory)
 
 class Category(Base):
     __tablename__ = "categories"

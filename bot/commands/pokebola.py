@@ -7,6 +7,8 @@ from database.models import Card, Group, Category, Tag
 
 router = Router()
 
+from sqlalchemy.orm import joinedload
+
 @router.message(Command(commands=["pokebola", "pb"]))
 async def pokebola_command(message: types.Message):
     """
@@ -27,14 +29,27 @@ async def pokebola_command(message: types.Message):
     args = text_parts[1].strip()
 
     async with get_session() as session:
-        # Query the card by ID or name
+        # Query the card by ID or name with eager loading
         card = None
         if args.isdigit():
             card_id = int(args)
-            card = await session.get(Card, card_id)
+            result = await session.execute(
+                select(Card)
+                .options(
+                    joinedload(Card.group).joinedload(Group.category),  # Eager load group and category
+                    joinedload(Card.tags)  # Eager load tags
+                )
+                .where(Card.id == card_id)
+            )
+            card = result.scalar_one_or_none()
         else:
             result = await session.execute(
-                select(Card).where(Card.name.ilike(f"%{args}%"))
+                select(Card)
+                .options(
+                    joinedload(Card.group).joinedload(Group.category),  # Eager load group and category
+                    joinedload(Card.tags)  # Eager load tags
+                )
+                .where(Card.name.ilike(f"%{args}%"))
             )
             cards = result.scalars().all()
 
@@ -53,15 +68,17 @@ async def pokebola_command(message: types.Message):
 
             card = cards[0]
 
+        if not card:
+            await message.reply(
+                "❌ **Erro:** Nenhum card encontrado com o ID ou nome fornecido.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
         # Fetch related details
         group = card.group
         category = group.category if group else None
-
-        # Fetch tags (deduplicated)
-        tags_result = await session.execute(
-            select(Tag).join(Tag.cards).where(Tag.cards.any(Card.id == card.id))
-        )
-        tags = {tag.name for tag in tags_result.scalars()}  # Use a set to ensure uniqueness
+        tags = {tag.name for tag in card.tags}  # Use a set to ensure uniqueness
         tags_str = ", ".join(tags) if tags else "Nenhuma"
 
         # Prepare the response

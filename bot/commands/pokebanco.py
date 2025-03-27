@@ -11,24 +11,27 @@ router = Router()
 
 @router.message(Command("pokebanco"))
 async def pokebanco_command(message: Message):
+    """
+    Handles the /pokebanco command to display the user's bank information.
+    """
     user_id = message.from_user.id
 
     async with get_session() as session:
-        # Query the user from the database
+        # Use the CRUD function to fetch the user
         user = await get_user_by_id(session, user_id)
 
         if not user:
             await message.answer(
                 "❌ **Treinador não encontrado!** ❌\n\n"
                 "Parece que você ainda não começou sua jornada. Use `/jornada` para se registrar e começar sua aventura! 🚀",
-                 parse_mode=ParseMode.MARKDOWN
+                parse_mode=ParseMode.MARKDOWN
             )
             return
 
         # Retrieve user data
         coins = user.coins
-        pokeballs = getattr(user, "pokeballs", 0)  # Default to 0 if not present
-        captures = getattr(user, "captures", 0)  # Default to 0 if not present
+        pokeballs = user.pokeballs
+        captures = user.captures  # Dynamically calculated from the inventory
 
         # Send the response to the user
         await message.answer(
