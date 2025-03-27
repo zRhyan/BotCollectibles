@@ -85,3 +85,17 @@ class Inventory(Base):
     # Relationships
     user = relationship("User", back_populates="inventory")
     card = relationship("Card", back_populates="inventory")
+
+class Marketplace(Base):
+    __tablename__ = "marketplace"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    seller_id = Column(BigInteger, ForeignKey("users.id"), nullable=False)
+    card_id = Column(Integer, ForeignKey("cards.id"), nullable=False)
+    price = Column(Integer, nullable=False)
+
+    # Relationships
+    seller = relationship("User", back_populates="marketplace_listings")
+    card = relationship("Card")
+
+

@@ -61,7 +61,8 @@ async def add_card(message: types.Message):
             "`nome do card | nome do grupo | nome da categoria | tag | raridade`\n"
             "ou\n"
             "`nome do card, nome do grupo, nome da categoria, tag, raridade`\n"
-            "⚠️ **Importante!** Na raridade apenas utilize um destes quatro emojis: 🥇 , 🥈 , 🥉 e 💎",
+            "⚠️ **Importante:**\n"
+            "- Raridades permitidas: 🥇, 🥈, 🥉 (para cards normais) e 💎 (para cards de eventos).",
             parse_mode=ParseMode.MARKDOWN
         )
         return
