@@ -17,7 +17,7 @@ class User(Base):
 
     # Relationship to inventory
     inventory = relationship("Inventory", back_populates="user")
-
+    marketplace_listings = relationship("Marketplace", back_populates="seller")
 
 class Category(Base):
     __tablename__ = "categories"
