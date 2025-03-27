@@ -16,7 +16,6 @@ async def pokemart_command(message: types.Message):
     """
     user_id = message.from_user.id
 
-    # Fetch the user's nickname and coins
     async with get_session() as session:
         result = await session.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
@@ -31,26 +30,62 @@ async def pokemart_command(message: types.Message):
         nickname = user.nickname
         coins = user.coins
 
-    # Create the main menu text
     text = (
         f"👋 Olá, **{nickname}**! Encontrei alguns produtos à venda, o que deseja comprar?\n\n"
         f"💰 **Suas moedas:** {coins}\n\n"
-        f"Escolha uma das opções abaixo:"
+        "Escolha uma das opções abaixo:"
     )
 
-    # Build the keyboard using InlineKeyboardBuilder
     keyboard = InlineKeyboardBuilder()
     keyboard.button(text="🎟️ EVENT CARDS", callback_data="pokemart_event_cards")
     keyboard.button(text="🃏 CAPTURAS", callback_data="pokemart_capturas")
     keyboard.button(text="⚪ POKÉBOLAS", callback_data="pokemart_pokebolas")
-    keyboard.adjust(1)  # arrange one button per row
+    keyboard.adjust(1)  # one button per row
 
     await message.reply(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
+
+
+@router.callback_query(lambda call: call.data == "pokemart_main_menu")
+async def pokemart_main_menu(callback: types.CallbackQuery):
+    """
+    Returns the user to the main Pokémart menu.
+    """
+    user_id = callback.from_user.id
+
+    async with get_session() as session:
+        result = await session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
+        if not user:
+            await callback.message.edit_text(
+                "❌ **Erro:** Você ainda não está registrado no sistema. Use o comando `/jornada` para começar sua aventura.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        nickname = user.nickname
+        coins = user.coins
+
+    text = (
+        f"👋 Olá, **{nickname}**! Encontrei alguns produtos à venda, o que deseja comprar?\n\n"
+        f"💰 **Suas moedas:** {coins}\n\n"
+        "Escolha uma das opções abaixo:"
+    )
+
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="🎟️ EVENT CARDS", callback_data="pokemart_event_cards")
+    keyboard.button(text="🃏 CAPTURAS", callback_data="pokemart_capturas")
+    keyboard.button(text="⚪ POKÉBOLAS", callback_data="pokemart_pokebolas")
+    keyboard.adjust(1)
+
+    await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
+
 
 @router.callback_query(lambda call: call.data == "pokemart_event_cards")
 async def pokemart_event_cards(callback: types.CallbackQuery):
     """
-    Displays the list of event cards (💎 rarity) available for purchase.
+    Displays the list of Event Cards (💎 rarity) available for purchase.
+    Includes a 'Voltar' button to return to the main menu.
     """
     async with get_session() as session:
         result = await session.execute(select(Card).where(Card.rarity == "💎"))
@@ -66,6 +101,7 @@ async def pokemart_event_cards(callback: types.CallbackQuery):
     text = "🎟️ **Event Cards**\n\nEscolha um card para comprar:\n\n"
     keyboard = InlineKeyboardBuilder()
     for card in event_cards:
+        # Assumes that the Card model has a 'price' attribute.
         keyboard.button(
             text=f"{card.name} - {card.price} moedas",
             callback_data=f"buy_event_card_{card.id}"
@@ -75,14 +111,18 @@ async def pokemart_event_cards(callback: types.CallbackQuery):
 
     await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
 
+
 @router.callback_query(lambda call: call.data == "pokemart_capturas")
 async def pokemart_capturas(callback: types.CallbackQuery):
     """
-    Displays the list of normal cards (🥇, 🥈, 🥉 rarities) for sale by other users.
+    Displays the list of Capturas (normal cards with 🥇, 🥈, 🥉 rarities) available for purchase.
+    Includes a 'Voltar' button to return to the main menu.
     """
     async with get_session() as session:
         result = await session.execute(
-            select(Marketplace).join(Marketplace.card).where(Card.rarity.in_(["🥇", "🥈", "🥉"]))
+            select(Marketplace)
+            .join(Marketplace.card)
+            .where(Card.rarity.in_(["🥇", "🥈", "🥉"]))
         )
         listings = result.scalars().all()
 
@@ -100,6 +140,38 @@ async def pokemart_capturas(callback: types.CallbackQuery):
             text=f"{listing.card.name} - {listing.price} moedas",
             callback_data=f"buy_marketplace_card_{listing.id}"
         )
+    keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
+    keyboard.adjust(1)
+
+    await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
+
+
+@router.callback_query(lambda call: call.data == "pokemart_pokebolas")
+async def pokemart_pokebolas(callback: types.CallbackQuery):
+    """
+    Displays options to purchase Pokébolas.
+    Includes a 'Voltar' button to return to the main menu.
+    """
+    async with get_session() as session:
+        result = await session.execute(select(User).where(User.id == callback.from_user.id))
+        user = result.scalar_one_or_none()
+
+    if not user:
+        await callback.message.edit_text(
+            "❌ **Erro:** Você ainda não está registrado no sistema.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    text = (
+        "⚪ **Pokébolas**\n\n"
+        "Aqui você pode comprar mais pokébolas para capturar seus cards.\n"
+        "Selecione a opção desejada:"
+    )
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="10 Pokébolas - 50 moedas", callback_data="buy_pokebolas_10")
+    keyboard.button(text="25 Pokébolas - 100 moedas", callback_data="buy_pokebolas_25")
+    keyboard.button(text="50 Pokébolas - 180 moedas", callback_data="buy_pokebolas_50")
     keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
     keyboard.adjust(1)
 
