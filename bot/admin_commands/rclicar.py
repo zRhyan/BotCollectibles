@@ -1,7 +1,8 @@
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
-from sqlalchemy.future import select, update
+from sqlalchemy.future import select
+from sqlalchemy import update
 from database.models import User
 from database.session import get_session
 
