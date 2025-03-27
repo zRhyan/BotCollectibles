@@ -26,48 +26,12 @@ class JornadaStates(StatesGroup):
 
 @router.message(Command("jornada"))
 async def jornada_command(message: Message, state: FSMContext):
-    user_id = message.from_user.id
-    username = message.from_user.username or "Usuário sem @"
+    logging.info(f"Received /jornada command from user {message.from_user.id} (@{message.from_user.username})")
 
-    # Access the bot instance from the message object
-    bot = message.bot
-
-    # Check if the user is a member of @pokunews
     try:
-        member = await bot.get_chat_member("@pokunews", user_id)
-        if member.status not in ["member", "administrator", "creator"]:
-            await message.answer(
-                "⚠️ Você precisa ser membro do [Instituto de Informações de Pokedéx](https://t.me/pokunews) "
-                "para se registrar no bot. Por favor, entre no canal e tente novamente.",
-                parse_mode="Markdown"
-            )
-            return
-    except Exception:
-        await message.answer(
-            "⚠️ Não foi possível verificar sua associação ao [Instituto de Informações de Pokedéx](https://t.me/pokunews). "
-            "Por favor, entre no canal e tente novamente.",
-            parse_mode="Markdown"
-        )
-        return
-
-    async with get_session() as session:
-        # Check if the user is already registered in the DB
-        user = await get_user_by_id(session, user_id)
-
-    if user:
-        await message.answer(
-            f"Você já está registrado como @{user.nickname}, {username}! 🚀",
-            parse_mode=ParseMode.HTML
-        )
-    else:
-        await message.answer(
-            "Bem-vindo à sua jornada! 🎉\n"
-            "Por favor, escolha um @ único para o bot te chamar (sem espaços e "
-            "com até 20 caracteres):",
-            parse_mode=ParseMode.HTML
-        )
-        # Move to the next FSM state
-        await state.set_state(JornadaStates.waiting_for_nickname)
+        await message.answer("The /jornada command is working!")
+    except Exception as e:
+        logging.error(f"Error in /jornada command: {e}")
 
 
 @router.callback_query(
