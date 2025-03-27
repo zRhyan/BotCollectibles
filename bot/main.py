@@ -21,6 +21,7 @@ from admin_commands.addcarta import router as addcarta_router
 from commands.admin import router as admin_router
 from commands.pokebola import router as pokebola_router
 from admin_commands.rclicar import router as rclicar_router
+from commands.pokemart import router as pokemart_router
 
 # Import the database 
 from database.models import Base
@@ -81,6 +82,7 @@ dp.include_router(addcarta_router)
 dp.include_router(admin_router)
 dp.include_router(pokebola_router)
 dp.include_router(rclicar_router)
+dp.include_router(pokemart_router)
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
