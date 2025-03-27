@@ -105,6 +105,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="pokebanco", description="Ver suas moedas e pokébolas"),
         BotCommand(command="capturar", description="Capturar um card"),
         BotCommand(command="pokebola", description="Exibir informações sobre um card"),
+        BotCommand(command="pokemart", description="Acessar o Pokémart"),
     ]
     await bot.set_my_commands(commands)
 
@@ -119,6 +120,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="pokebanco", description="Ver suas moedas e pokébolas"),
         BotCommand(command="capturar", description="Capturar um card"),
         BotCommand(command="pokebola", description="Exibir informações sobre um card"),
+        BotCommand(command="pokemart", description="Acessar o Pokémart"),
     ]
 
     # Fetch the list of admin users from the database

@@ -1,7 +1,7 @@
 from aiogram import Router, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select
 from database.session import get_session
 from database.models import User, Card, Marketplace
@@ -31,22 +31,21 @@ async def pokemart_command(message: types.Message):
         nickname = user.nickname
         coins = user.coins
 
-    # Create the main menu
+    # Create the main menu text
     text = (
         f"👋 Olá, **{nickname}**! Encontrei alguns produtos à venda, o que deseja comprar?\n\n"
         f"💰 **Suas moedas:** {coins}\n\n"
         f"Escolha uma das opções abaixo:"
     )
 
-    # Initialize InlineKeyboardMarkup with an empty inline_keyboard list
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[], row_width=1)
-    keyboard.add(
-        InlineKeyboardButton(text="🎟️ EVENT CARDS", callback_data="pokemart_event_cards"),
-        InlineKeyboardButton(text="🃏 CAPTURAS", callback_data="pokemart_capturas"),
-        InlineKeyboardButton(text="⚪ POKÉBOLAS", callback_data="pokemart_pokebolas")
-    )
+    # Build the keyboard using InlineKeyboardBuilder
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="🎟️ EVENT CARDS", callback_data="pokemart_event_cards")
+    keyboard.button(text="🃏 CAPTURAS", callback_data="pokemart_capturas")
+    keyboard.button(text="⚪ POKÉBOLAS", callback_data="pokemart_pokebolas")
+    keyboard.adjust(1)  # arrange one button per row
 
-    await message.reply(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+    await message.reply(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
 
 @router.callback_query(lambda call: call.data == "pokemart_event_cards")
 async def pokemart_event_cards(callback: types.CallbackQuery):
@@ -59,26 +58,22 @@ async def pokemart_event_cards(callback: types.CallbackQuery):
 
     if not event_cards:
         await callback.message.edit_text(
-            "🎟️ **Event Cards**\n\n"
-            "Nenhum card de evento está disponível no momento.",
+            "🎟️ **Event Cards**\n\nNenhum card de evento está disponível no momento.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
 
     text = "🎟️ **Event Cards**\n\nEscolha um card para comprar:\n\n"
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[], row_width=1)
-
+    keyboard = InlineKeyboardBuilder()
     for card in event_cards:
-        keyboard.add(
-            InlineKeyboardButton(
-                text=f"{card.name} - {card.price} moedas",
-                callback_data=f"buy_event_card_{card.id}"
-            )
+        keyboard.button(
+            text=f"{card.name} - {card.price} moedas",
+            callback_data=f"buy_event_card_{card.id}"
         )
+    keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
+    keyboard.adjust(1)
 
-    keyboard.add(InlineKeyboardButton(text="⬅️ Voltar", callback_data="pokemart_main_menu"))
-
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+    await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
 
 @router.callback_query(lambda call: call.data == "pokemart_capturas")
 async def pokemart_capturas(callback: types.CallbackQuery):
@@ -93,23 +88,19 @@ async def pokemart_capturas(callback: types.CallbackQuery):
 
     if not listings:
         await callback.message.edit_text(
-            "🃏 **Capturas**\n\n"
-            "Nenhum card está à venda no momento.",
+            "🃏 **Capturas**\n\nNenhum card está à venda no momento.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
 
     text = "🃏 **Capturas**\n\nEscolha um card para comprar:\n\n"
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[], row_width=1)
-
+    keyboard = InlineKeyboardBuilder()
     for listing in listings:
-        keyboard.add(
-            InlineKeyboardButton(
-                text=f"{listing.card.name} - {listing.price} moedas",
-                callback_data=f"buy_marketplace_card_{listing.id}"
-            )
+        keyboard.button(
+            text=f"{listing.card.name} - {listing.price} moedas",
+            callback_data=f"buy_marketplace_card_{listing.id}"
         )
+    keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
+    keyboard.adjust(1)
 
-    keyboard.add(InlineKeyboardButton(text="⬅️ Voltar", callback_data="pokemart_main_menu"))
-
-    await callback.message.edit_text(text, reply_markup=keyboard, parse_mode=ParseMode.MARKDOWN)
+    await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
