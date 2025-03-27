@@ -19,7 +19,8 @@ async def help_command(message: Message):
         "🛒 **Comandos de Loja:**\n"
         "🔹 `/pokemart` ou `/pokem` - Acesse o Pokémart para comprar cards especiais e capturas. 🛍️\n"
         "🔹 `/comprarbolas quantidade` - Compre Pokébolas para capturar mais cards. 🎯\n"
-        "🔹 `/doar` - Doe cards para outros treinadores. 🎁\n\n"
+        "🔹 `/doarcards` - Doe cards para outros treinadores. 🎁\n"
+        "🔹 `/doarbolas` - Doe Pokébolas para outros treinadores. 🎁\n\n"
         "Divirta-se e boa sorte na sua aventura! ⚡"
     )
     await message.answer(help_text, parse_mode=ParseMode.MARKDOWN)
