@@ -23,6 +23,7 @@ from commands.pokemart import router as pokemart_router
 from commands.comprarbolas import router as comprarbolas_router
 from commands.doarcards import router as doarcards_router
 from commands.doarbolas import router as doarbolas_router
+from commands.doarcoins import router as doarcoins_router
 
 from admin_commands.addcarta import router as addcarta_router
 from admin_commands.rclicar import router as rclicar_router
@@ -92,7 +93,7 @@ dp.include_router(pokemart_router)
 dp.include_router(comprarbolas_router)
 dp.include_router(doarcards_router)
 dp.include_router(doarbolas_router)
-
+dp.include_router(doarcoins_router)
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
@@ -119,6 +120,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="comprarbolas", description="Comprar Pokébolas"),
         BotCommand(command="doarcards", description="Doar cards para outro treinador"),
         BotCommand(command="doarbolas", description="Doar pokebolas para outro treinador"),
+        BotCommand(command="doarcoins", description="Doar pokecoins para outro treinador"),
     ]
     await bot.set_my_commands(commands)
 
@@ -138,6 +140,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="comprarbolas", description="Comprar Pokébolas"),
         BotCommand(command="doarcards", description="Doar cards para outro treinador"),
         BotCommand(command="doarbolas", description="Doar pokebolas para outro treinador"),
+        BotCommand(command="doarcoins", description="Doar pokecoins para outro treinador"),
     ]
 
     # Fetch the list of admin users from the database
