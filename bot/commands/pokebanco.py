@@ -2,10 +2,12 @@ from aiogram import Router
 from aiogram.types import Message
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
+from sqlalchemy.orm import joinedload
+from sqlalchemy import select
 
 # Database imports
 from database.session import get_session
-from database.crud_user import get_user_by_id
+from database.models import User
 
 router = Router()
 
@@ -17,8 +19,13 @@ async def pokebanco_command(message: Message):
     user_id = message.from_user.id
 
     async with get_session() as session:
-        # Use the CRUD function to fetch the user
-        user = await get_user_by_id(session, user_id)
+        # Query the user with eager loading of the inventory relationship
+        result = await session.execute(
+            select(User)
+            .options(joinedload(User.inventory))  # Eagerly load the inventory relationship
+            .where(User.id == user_id)
+        )
+        user = result.scalar_one_or_none()
 
         if not user:
             await message.answer(
