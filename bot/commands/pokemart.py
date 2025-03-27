@@ -32,7 +32,7 @@ async def pokemart_command(message: types.Message):
 
     text = (
         f"👋 Olá, **{nickname}**! Encontrei alguns produtos à venda, o que deseja comprar?\n\n"
-        f"💰 **Suas moedas:** {coins}\n\n"
+        f"💰 **Suas pokecoins:** {coins}\n\n"
         "Escolha uma das opções abaixo:"
     )
 
@@ -67,7 +67,7 @@ async def pokemart_main_menu(callback: types.CallbackQuery):
 
     text = (
         f"👋 Olá, **{nickname}**! Encontrei alguns produtos à venda, o que deseja comprar?\n\n"
-        f"💰 **Suas moedas:** {coins}\n\n"
+        f"💰 **Suas pokecoins:** {coins}\n\n"
         "Escolha uma das opções abaixo:"
     )
 
@@ -105,7 +105,7 @@ async def pokemart_event_cards(callback: types.CallbackQuery):
     for card in event_cards:
         # Assumes that the Card model has a 'price' attribute.
         keyboard.button(
-            text=f"{card.name} - {card.price} moedas",
+            text=f"{card.name} - {card.price} pokecoins",
             callback_data=f"buy_event_card_{card.id}"
         )
     keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
@@ -143,7 +143,7 @@ async def pokemart_capturas(callback: types.CallbackQuery):
     keyboard = InlineKeyboardBuilder()
     for listing in listings:
         keyboard.button(
-            text=f"{listing.card.name} - {listing.price} moedas",
+            text=f"{listing.card.name} - {listing.price} pokecoins",
             callback_data=f"buy_marketplace_card_{listing.id}"
         )
     keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")

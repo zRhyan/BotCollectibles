@@ -59,7 +59,7 @@ async def distribute_coins_command(message: types.Message):
             await session.commit()
 
         await message.reply(
-            f"✅ **Sucesso!** {quantity} moedas foram distribuídas para todos os usuários.",
+            f"✅ **Sucesso!** {quantity} pokecoins foram distribuídas para todos os usuários.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -92,6 +92,6 @@ async def distribute_coins_command(message: types.Message):
             await session.commit()
 
         await message.reply(
-            f"✅ **Sucesso!** {quantity} moedas foram adicionadas ao usuário `{nickname}`.",
+            f"✅ **Sucesso!** {quantity} pokecoins foram adicionadas ao usuário `{nickname}`.",
             parse_mode=ParseMode.MARKDOWN
         )

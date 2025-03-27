@@ -44,7 +44,7 @@ async def pokebanco_command(message: Message):
         # Send the response to the user
         await message.answer(
             f"🏦 **Bem-vindo ao PokéBanco!** 🏦\n\n"
-            f"💰 **Moedas:** `{coins}`\n"
+            f"💰 **Pokecoins:** `{coins}`\n"
             f"🎯 **Pokébolas:** `{pokeballs}`\n"
             f"📸 **Capturas:** `{captures}`\n\n"
             f"Continue sua jornada e acumule mais riquezas e conquistas! 🌟",

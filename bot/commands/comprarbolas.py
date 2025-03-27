@@ -58,9 +58,9 @@ async def comprarbolas_command(message: types.Message):
         # Check if the user has enough coins
         if user.coins < total_cost:
             await message.reply(
-                f"❌ **Erro:** Você não tem moedas suficientes para comprar {quantity} Pokébolas.\n"
-                f"💰 **Suas moedas:** {user.coins}\n"
-                f"💵 **Custo total:** {total_cost} moedas",
+                f"❌ **Erro:** Você não tem pokecoins suficientes para comprar {quantity} Pokébolas.\n"
+                f"💰 **Suas pokecoins:** {user.coins}\n"
+                f"💵 **Custo total:** {total_cost} pokecoins",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
@@ -72,8 +72,8 @@ async def comprarbolas_command(message: types.Message):
 
     # Confirm the purchase
     await message.reply(
-        f"✅ **Sucesso!** Você comprou {quantity} Pokébolas por {total_cost} moedas.\n"
-        f"💰 **Moedas restantes:** {user.coins}\n"
+        f"✅ **Sucesso!** Você comprou {quantity} Pokébolas por {total_cost} pokecoins.\n"
+        f"💰 **Pokecoins restantes:** {user.coins}\n"
         f"🎯 **Pokébolas totais:** {user.pokeballs}",
         parse_mode=ParseMode.MARKDOWN
     )
