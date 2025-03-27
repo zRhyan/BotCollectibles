@@ -1,4 +1,3 @@
-# commands/pokebola.py
 from aiogram import Router, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
@@ -11,14 +10,12 @@ router = Router()
 @router.message(Command(commands=["pokebola", "pb"]))
 async def pokebola_command(message: types.Message):
     """
-    Handles the /pokebola (or /pb) command in Aiogram v3.
+    Handles the /pokebola (or /pb) command.
     Expects one argument: either card ID or partial card name.
-    Fetches the card, then sends its image + attributes.
+    Fetches the card, then sends its image and attributes.
     """
-    # Parse args manually (Aiogram v3 no longer has message.get_args())
+    # Parse arguments
     text_parts = message.text.split(maxsplit=1)
-    # e.g. ['/pokebola', 'black hole'] or ['/pb', '42']
-
     if len(text_parts) < 2:
         await message.reply(
             "❗ **Erro:** Forneça o ID ou nome do card. Exemplo:\n"
@@ -30,62 +27,56 @@ async def pokebola_command(message: types.Message):
     args = text_parts[1].strip()
 
     async with get_session() as session:
-        # 1) Try numeric ID
+        # Query the card by ID or name
+        card = None
         if args.isdigit():
             card_id = int(args)
             card = await session.get(Card, card_id)
         else:
-            # 2) Query by partial name
             result = await session.execute(
                 select(Card).where(Card.name.ilike(f"%{args}%"))
             )
-            card = result.scalar_one_or_none()
+            cards = result.scalars().all()
 
-        if not card:
-            await message.reply(
-                "❌ **Erro:** Card não encontrado.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
+            if len(cards) == 0:
+                await message.reply(
+                    "❌ **Erro:** Nenhum card encontrado com o ID ou nome fornecido.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+            elif len(cards) > 1:
+                await message.reply(
+                    "⚠️ **Erro:** Mais de um card encontrado com esse nome. Seja mais específico.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
 
-        # Fetch group and category if they exist
-        group = None
-        if card.group_id:
-            group_result = await session.execute(
-                select(Group).where(Group.id == card.group_id)
-            )
-            group = group_result.scalar_one_or_none()
+            card = cards[0]
 
-        category = None
-        if group and group.category_id:
-            category_result = await session.execute(
-                select(Category).where(Category.id == group.category_id)
-            )
-            category = category_result.scalar_one_or_none()
+        # Fetch related details
+        group = card.group
+        category = group.category if group else None
 
-        # Fetch tags (assuming many-to-many)
+        # Fetch tags (deduplicated)
         tags_result = await session.execute(
             select(Tag).join(Tag.cards).where(Tag.cards.any(Card.id == card.id))
         )
-        tags_list = tags_result.scalars().all()
-        tags_str = ", ".join(tag.name for tag in tags_list) if tags_list else "Nenhuma"
+        tags = {tag.name for tag in tags_result.scalars()}  # Use a set to ensure uniqueness
+        tags_str = ", ".join(tags) if tags else "Nenhuma"
 
-        category_name = category.name if category else "Desconhecida"
-        group_name = group.name if group else "Desconhecido"
-
-        # Build caption
+        # Prepare the response
         caption = (
             f"🆔 **ID:** {card.id}\n"
             f"🃏 **Nome:** {card.name}\n"
-            f"📂 **Categoria:** {category_name}\n"
-            f"📁 **Grupo:** {group_name}\n"
+            f"📂 **Categoria:** {category.name if category else 'Nenhuma'}\n"
+            f"📁 **Grupo:** {group.name if group else 'Nenhum'}\n"
             f"✨ **Raridade:** {card.rarity}\n"
             f"🏷️ **Tags:** {tags_str}"
         )
 
-        # Send photo + caption
+        # Send the card image with the caption
         await message.answer_photo(
-            photo=card.image_file_id,  # must be a valid Telegram file_id
+            photo=card.image_file_id,
             caption=caption,
             parse_mode=ParseMode.MARKDOWN
         )
