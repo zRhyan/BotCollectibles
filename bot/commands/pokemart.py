@@ -37,9 +37,9 @@ async def pokemart_command(message: types.Message):
     )
 
     keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="🎟️ EVENT CARDS", callback_data="pokemart_event_cards")
+    keyboard.button(text="🎟️ CARDS ESPECIAIS", callback_data="pokemart_event_cards")
     keyboard.button(text="🃏 CAPTURAS", callback_data="pokemart_capturas")
-    keyboard.button(text="⚪ POKÉBOLAS", callback_data="pokemart_pokebolas")
+    keyboard.button(text="⚪ POKEBOLAS", callback_data="pokemart_pokebolas")
     keyboard.adjust(1)  # one button per row
 
     await message.reply(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
@@ -92,8 +92,12 @@ async def pokemart_event_cards(callback: types.CallbackQuery):
         event_cards = result.scalars().all()
 
     if not event_cards:
+        keyboard = InlineKeyboardBuilder()
+        keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
+        keyboard.adjust(1)
         await callback.message.edit_text(
             "🎟️ **Event Cards**\n\nNenhum card de evento está disponível no momento.",
+            reply_markup=keyboard.as_markup(),
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -127,8 +131,12 @@ async def pokemart_capturas(callback: types.CallbackQuery):
         listings = result.scalars().all()
 
     if not listings:
+        keyboard = InlineKeyboardBuilder()
+        keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
+        keyboard.adjust(1)
         await callback.message.edit_text(
             "🃏 **Capturas**\n\nNenhum card está à venda no momento.",
+            reply_markup=keyboard.as_markup(),
             parse_mode=ParseMode.MARKDOWN
         )
         return
