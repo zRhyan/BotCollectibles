@@ -46,7 +46,7 @@ async def pokebola_command(message: types.Message):
                 return
             elif len(cards) > 1:
                 await message.reply(
-                    "⚠️ **Erro:** Mais de um card encontrado com esse nome. Seja mais específico.",
+                    "⚠️ **Erro:** Mais de um card encontrado com um nome similar. Tente utilizar o ID.",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
