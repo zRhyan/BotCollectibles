@@ -13,9 +13,12 @@ async def help_command(message: Message):
         "🔹 `/jornada` - Inscreva-se e torne-se um treinador Pokémon! 🚀\n"
         "🔹 `/mochila` - Confira os itens que você carrega. 🎒\n"
         "🔹 `/pokebanco` - Veja suas riquezas no PokéBanco. 🏦\n"
-        "🔹 `/pokebola` ou `/pb` cardid ou cardname - Visualize o card. 🏦\n\n"
+        "🔹 `/pokebola` ou `/pb` cardid ou cardname - Visualize informações sobre um card. 🃏\n\n"
         "⚔️ **Comandos de Captura:**\n"
         "🔹 `/capturar` ou `/cap` - Tente capturar um card raro! 🎯\n\n"
+        "🛒 **Comandos de Loja:**\n"
+        "🔹 `/pokemart` ou `/pokem` - Acesse o Pokémart para comprar cards especiais e capturas. 🛍️\n"
+        "🔹 `/comprarbolas quantidade` - Compre Pokébolas para capturar mais cards. 🎯\n\n"
         "Divirta-se e boa sorte na sua aventura! ⚡"
     )
     await message.answer(help_text, parse_mode=ParseMode.MARKDOWN)

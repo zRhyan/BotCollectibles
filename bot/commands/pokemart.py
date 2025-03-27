@@ -39,7 +39,6 @@ async def pokemart_command(message: types.Message):
     keyboard = InlineKeyboardBuilder()
     keyboard.button(text="🎟️ CARDS ESPECIAIS", callback_data="pokemart_event_cards")
     keyboard.button(text="🃏 CAPTURAS", callback_data="pokemart_capturas")
-    keyboard.button(text="⚪ POKEBOLAS", callback_data="pokemart_pokebolas")
     keyboard.adjust(1)  # one button per row
 
     await message.reply(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
@@ -75,7 +74,6 @@ async def pokemart_main_menu(callback: types.CallbackQuery):
     keyboard = InlineKeyboardBuilder()
     keyboard.button(text="🎟️ EVENT CARDS", callback_data="pokemart_event_cards")
     keyboard.button(text="🃏 CAPTURAS", callback_data="pokemart_capturas")
-    keyboard.button(text="⚪ POKÉBOLAS", callback_data="pokemart_pokebolas")
     keyboard.adjust(1)
 
     await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
@@ -148,38 +146,6 @@ async def pokemart_capturas(callback: types.CallbackQuery):
             text=f"{listing.card.name} - {listing.price} moedas",
             callback_data=f"buy_marketplace_card_{listing.id}"
         )
-    keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
-    keyboard.adjust(1)
-
-    await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
-
-
-@router.callback_query(lambda call: call.data == "pokemart_pokebolas")
-async def pokemart_pokebolas(callback: types.CallbackQuery):
-    """
-    Displays options to purchase Pokébolas.
-    Includes a 'Voltar' button to return to the main menu.
-    """
-    async with get_session() as session:
-        result = await session.execute(select(User).where(User.id == callback.from_user.id))
-        user = result.scalar_one_or_none()
-
-    if not user:
-        await callback.message.edit_text(
-            "❌ **Erro:** Você ainda não está registrado no sistema.",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
-    text = (
-        "⚪ **Pokébolas**\n\n"
-        "Aqui você pode comprar mais pokébolas para capturar seus cards.\n"
-        "Selecione a opção desejada:"
-    )
-    keyboard = InlineKeyboardBuilder()
-    keyboard.button(text="10 Pokebolas - 50 moedas", callback_data="buy_pokebolas_10")
-    keyboard.button(text="25 Pokebolas - 100 moedas", callback_data="buy_pokebolas_25")
-    keyboard.button(text="50 Pokebolas - 180 moedas", callback_data="buy_pokebolas_50")
     keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
     keyboard.adjust(1)
 
