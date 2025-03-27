@@ -58,9 +58,20 @@ async def add_card(message: types.Message):
     except ValueError:
         await message.reply(
             "⚠️ **Formato inválido!** A legenda deve estar no formato:\n"
-            "`[nome do card] | [nome do grupo] | [nome da categoria] | [tag] | [raridade]`\n"
+            "`nome do card | nome do grupo | nome da categoria | tag | raridade`\n"
             "ou\n"
-            "`[nome do card], [nome do grupo], [nome da categoria], [tag], [raridade]`",
+            "`nome do card, nome do grupo, nome da categoria, tag, raridade`\n"
+            "⚠️ **Importante!** Na raridade apenas utilize um destes quatro emojis: 🥇 , 🥈 , 🥉 e 💎",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Validate rarity
+    allowed_rarities = {"🥇", "🥈", "🥉", "💎"}
+    if rarity not in allowed_rarities:
+        await message.reply(
+            f"❌ **Erro:** A raridade '{rarity}' é inválida.\n"
+            f"Por favor, use apenas um destes emojis para a raridade: 🥇, 🥈, 🥉 e 💎.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
