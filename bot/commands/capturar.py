@@ -16,8 +16,8 @@ router = Router()
 async def capturar_command(message: types.Message):
     """
     Handles the initial /cap or /capturar command in a group.
-    1) Checks if user is registered.
-    2) Checks if user has pokebolas.
+    1) Checks if the user is registered.
+    2) Checks if the user has pokebolas.
     3) Shows an inline keyboard of categories with user-specific callback data.
     """
     user_id = message.from_user.id
@@ -52,7 +52,7 @@ async def capturar_command(message: types.Message):
             )
             return
 
-        # Build inline keyboard and include the user_id in the callback data to isolate actions.
+        # Build inline keyboard with user-specific callback data.
         keyboard = InlineKeyboardBuilder()
         for index, cat in enumerate(categories):
             # Callback data now has the format: choose_cat_{user_id}_{category_id}
@@ -82,10 +82,11 @@ async def handle_category_choice(callback: CallbackQuery):
     Handles the user tapping on a category button:
     1) Verifies that the callback is from the correct user.
     2) Deducts 1 pokebola from the user.
-    3) Determines card rarity by random probability.
-    4) Selects a random card from that category with the chosen rarity.
+    3) Determines the target rarity based on probability.
+    4) Selects a random card from that category with the target rarity.
+       If no card is found, falls back to any card in that category.
     5) Adds the card to the user's inventory.
-    6) Shows the result with an image + stats.
+    6) Shows the result with an image + stats using the card's actual rarity.
     """
     data_parts = callback.data.split("_")
     # Expected format: "choose_cat_{user_id}_{category_id}"
@@ -95,7 +96,6 @@ async def handle_category_choice(callback: CallbackQuery):
 
     expected_user_id = int(data_parts[2])
     if callback.from_user.id != expected_user_id:
-        # Notify the user that they are not allowed to use this button.
         await callback.answer("Você não pode usar este botão.", show_alert=True)
         return
 
@@ -124,27 +124,27 @@ async def handle_category_choice(callback: CallbackQuery):
         user.pokeballs -= 1
         await session.commit()
 
-        # ---------- Step 2: Determine rarity by random probability ----------
-        # Probabilities: 🥉 = 50%, 🥈 = 30%, 🥇 = 20%
+        # ---------- Step 2: Determine target rarity based on probability ----------
+        # Probabilities: 50% chance for bronze (🥉), 30% for silver (🥈), 20% for gold (🥇)
         roll = random.random()  # 0.0 <= roll < 1.0
         if roll < 0.50:
-            chosen_rarity = "🥉"
+            target_rarity = "🥉"
         elif roll < 0.80:
-            chosen_rarity = "🥈"
+            target_rarity = "🥈"
         else:
-            chosen_rarity = "🥇"
+            target_rarity = "🥇"
 
-        # ---------- Step 3: Get a random card in that category with chosen rarity ----------
+        # ---------- Step 3: Get a random card in that category with the target rarity ----------
         card_result = await session.execute(
             select(Card)
             .join(Card.group)
-            .where(Group.category_id == category_id, Card.rarity == chosen_rarity)
+            .where(Group.category_id == category_id, Card.rarity == target_rarity)
             .order_by(func.random())
             .limit(1)
         )
         card = card_result.scalar_one_or_none()
 
-        # If no card found for that rarity, fallback to any card in that category.
+        # If no card found for the target rarity, fallback to any card in that category.
         if not card:
             card_result = await session.execute(
                 select(Card)
@@ -183,14 +183,17 @@ async def handle_category_choice(callback: CallbackQuery):
         category_name = category_obj.name if category_obj else "Desconhecida"
 
         user_nickname = callback.from_user.username or "Treinador"
+        # Use the actual rarity stored in the card record
+        final_rarity = card.rarity
+
         caption = (
             f"🎰 Que sorte, @{user_nickname}! você acabou de capturar um pokecard.\n\n"
-            f"{chosen_rarity}{card.id}. {card.name} (1x)\n"
+            f"{final_rarity}{card.id}. {card.name} (1x)\n"
             f"📚 {category_name}\n\n"
             f"🎒Pokébolas restantes: {user.pokeballs}"
         )
 
-        # If you store card images via Telegram file_id, edit the message to show the card image.
+        # If the card has an image stored via Telegram file_id, show it with the caption.
         if card.image_file_id:
             await callback.message.edit_media(
                 media=types.InputMediaPhoto(
