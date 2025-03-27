@@ -27,7 +27,7 @@ The project is divided into two main parts:
 3.  ( ) /addb: Add banners for sale in profile
 4.  ( ) /adds: Add stickers for sale in profile
 5.  ( ) /adddex: Add binder/collection models for sale in profile
-6.  ( ) /rclicar: Reload spins
+6.  (X) /rclicar: Reload spins
 7.  ( ) /rcoins: Reload coins
 8.  ( ) /mute: Mute the bot
 9.  ( ) /ping: Check bot response time

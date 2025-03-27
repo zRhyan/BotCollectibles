@@ -95,7 +95,7 @@ async def add_card(message: types.Message):
                 session.add(group)
                 await session.flush()  # Ensure the group ID is available
 
-            # Ensure the tag exists
+            # Ensure the tag exists (fix for duplicate tags)
             result = await session.execute(select(Tag).where(Tag.name == tag_name))
             tag = result.scalar_one_or_none()
             if not tag:
