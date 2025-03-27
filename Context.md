@@ -28,12 +28,12 @@ The project is divided into two main parts:
 4.  ( ) /adds: Add stickers for sale in profile
 5.  ( ) /adddex: Add binder/collection models for sale in profile
 6.  (X) /rclicar: Reload spins
-7.  ( ) /rcoins: Reload coins
+7.  (X) /rcoins: Reload coins
 8.  ( ) /mute: Mute the bot
 9.  ( ) /ping: Check bot response time
 10. ( ) /addesp: Add tag
 11. ( ) /historico (@nickname): Display player's last 100 card history
-12. ( ) /admin (@nickname)
+12. (X) /admin (@nickname)
 
 ### 3. General Commands
 1.  (X) /jornada: Register the person in the bot, requesting a unique @ for their profile.
@@ -43,12 +43,12 @@ The project is divided into two main parts:
 5.  (X) /mochila: Show the player's complete inventory.
 6.  ( ) /pokedex or /pd: Show the collection/album.
 7.  ( ) /explorar: Get a free card every 12h (or defined period).
-8.  ( ) /pokemart or /pokem: Store for purchasing event cards, stickers, banners.
+8.  (X) /pokemart or /pokem: Store for purchasing event cards, stickers, banners.
 9.  (X) /pokebanco: Display coins (pokécoins), captures, and pokéballs.
 10. ( ) /doar: Donate cards or captures to another player.
 11. ( ) /roubar or /r: Trading cards between players, with confirmation.
 12. ( ) /ginasio: Show ranking of who has more cards of a specific type.
-13. ( ) /comprarbolas: Additional purchase of spins/pokéballs.
+13. (X) /comprarbolas: Additional purchase of spins/pokéballs.
 14. ( ) /favpoke: Set favorite card.
 15. ( ) /pokew: Add cards to wishlist.
 16. ( ) /pokewish or /wl: Display own wishlist or others' (when tagging another user).
