@@ -38,8 +38,8 @@ async def pokemart_command(message: types.Message):
         f"Escolha uma das opções abaixo:"
     )
 
-    # Inline keyboard with options
-    keyboard = InlineKeyboardMarkup(row_width=1)
+    # Initialize InlineKeyboardMarkup with an empty inline_keyboard list
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[], row_width=1)
     keyboard.add(
         InlineKeyboardButton(text="🎟️ EVENT CARDS", callback_data="pokemart_event_cards"),
         InlineKeyboardButton(text="🃏 CAPTURAS", callback_data="pokemart_capturas"),
@@ -66,7 +66,7 @@ async def pokemart_event_cards(callback: types.CallbackQuery):
         return
 
     text = "🎟️ **Event Cards**\n\nEscolha um card para comprar:\n\n"
-    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[], row_width=1)
 
     for card in event_cards:
         keyboard.add(
@@ -100,7 +100,7 @@ async def pokemart_capturas(callback: types.CallbackQuery):
         return
 
     text = "🃏 **Capturas**\n\nEscolha um card para comprar:\n\n"
-    keyboard = InlineKeyboardMarkup(row_width=1)
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[], row_width=1)
 
     for listing in listings:
         keyboard.add(

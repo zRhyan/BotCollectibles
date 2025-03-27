@@ -110,8 +110,15 @@ async def set_bot_commands(bot: Bot):
 
     # Admin-specific commands
     admin_commands = [
-        BotCommand(command="addcarta", description="Adicionar uma nova carta"),
-        BotCommand(command="rclicar", description="Reiniciar cliques de um usuário"),
+        BotCommand(command="addcarta", description="(Admin) Adicionar uma nova carta"),
+        BotCommand(command="rclicar", description="(Admin) Distribuir pokébolas"),
+        BotCommand(command="start", description="Iniciar o bot"),
+        BotCommand(command="help", description="Obter ajuda sobre os comandos"),
+        BotCommand(command="jornada", description="Registrar-se no bot"),
+        BotCommand(command="mochila", description="Ver sua mochila"),
+        BotCommand(command="pokebanco", description="Ver suas moedas e pokébolas"),
+        BotCommand(command="capturar", description="Capturar um card"),
+        BotCommand(command="pokebola", description="Exibir informações sobre um card"),
     ]
 
     # Fetch the list of admin users from the database
