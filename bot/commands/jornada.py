@@ -8,7 +8,6 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.enums import ParseMode
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
-import logging
 
 from database.session import get_session
 from database.models import User
@@ -27,12 +26,96 @@ class JornadaStates(StatesGroup):
 
 @router.message(Command("jornada"))
 async def jornada_command(message: Message, state: FSMContext):
-    logging.info(f"Received /jornada command from user {message.from_user.id} (@{message.from_user.username})")
+    user_id = message.from_user.id
+    username = message.from_user.username or "Usuário sem @"
 
+    # Access the bot instance from the message object
+    bot = message.bot
+
+    # Check if the user is a member of @pokunews
     try:
-        await message.answer("The /jornada command is working!")
-    except Exception as e:
-        logging.error(f"Error in /jornada command: {e}")
+        member = await bot.get_chat_member("@pokunews", user_id)
+        if member.status not in ["member", "administrator", "creator"]:
+            await message.answer(
+                "⚠️ Você precisa ser membro do [Instituto de Informações de Pokedéx](https://t.me/pokunews) "
+                "para se registrar no bot. Por favor, entre no canal e tente novamente.",
+                parse_mode="Markdown"
+            )
+            return
+    except Exception:
+        await message.answer(
+            "⚠️ Não foi possível verificar sua associação ao [Instituto de Informações de Pokedéx](https://t.me/pokunews). "
+            "Por favor, entre no canal e tente novamente.",
+            parse_mode="Markdown"
+        )
+        return
+
+    async with get_session() as session:
+        # Check if the user is already registered in the DB
+        user = await get_user_by_id(session, user_id)
+
+    if user:
+        await message.answer(
+            f"Você já está registrado como @{user.nickname}, {username}! 🚀",
+            parse_mode=ParseMode.HTML
+        )
+    else:
+        await message.answer(
+            "Bem-vindo à sua jornada! 🎉\n"
+            "Por favor, escolha um @ único para o bot te chamar (sem espaços e "
+            "com até 20 caracteres):",
+            parse_mode=ParseMode.HTML
+        )
+        # Move to the next FSM state
+        await state.set_state(JornadaStates.waiting_for_nickname)
+
+@router.message(JornadaStates.waiting_for_nickname)
+async def process_nickname(message: Message, state: FSMContext):
+    nickname = message.text.strip()
+
+    # Validação básica
+    if len(nickname) > 20:
+        await message.answer(
+            "⚠️ O @ deve ter no máximo 20 caracteres. Tente novamente:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    if " " in nickname:
+        await message.answer(
+            "⚠️ O @ não pode conter espaços. Tente novamente:",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Verifica se o apelido já está em uso
+    async with get_session() as session:
+        existing = await get_user_by_nickname(session, nickname)
+        if existing:
+            await message.answer(
+                "⚠️ Este @ já está em uso. Escolha outro:",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+    # Armazena temporariamente no contexto FSM
+    await state.update_data(nickname=nickname)
+
+    # Teclado inline de confirmação
+    keyboard = InlineKeyboardBuilder()
+    keyboard.button(text="Sim", callback_data="confirm_nickname")
+    keyboard.button(text="Não", callback_data="reject_nickname")
+    keyboard.adjust(2)
+
+    await message.answer(
+        f"O seu nickname será @{nickname}. Você deseja confirmar?",
+        reply_markup=keyboard.as_markup(),
+        parse_mode=ParseMode.MARKDOWN
+    )
+
+    # Avança para o próximo estado
+    await state.set_state(JornadaStates.confirming_nickname)
+
 
 
 @router.callback_query(
