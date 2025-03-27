@@ -15,11 +15,18 @@ router = Router()
 @router.message(Command(commands=["cap", "capturar"]))
 async def capturar_command(message: types.Message):
     """
-    Handles the initial /cap or /capturar command in a group.
-    1) Checks if the user is registered.
-    2) Checks if the user has pokebolas.
-    3) Shows an inline keyboard of categories with user-specific callback data.
+    Handles the initial /cap or /capturar command.
+    This command is only available in private chats.
     """
+    # Check if the command is being used in a group
+    if message.chat.type != "private":
+        await message.reply(
+            "❌ Este comando não está disponível em grupos.\n"
+            "Por favor, use este comando em uma conversa privada com o bot.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
     user_id = message.from_user.id
 
     async with get_session() as session:

@@ -12,6 +12,7 @@ router = Router()
 async def add_card(message: types.Message):
     """
     Handles the /addcarta command to add a new card.
+    Accepts images sent as photos or as Telegram files (documents).
     """
     # Check if the user is an admin
     async with get_session() as session:
@@ -28,15 +29,30 @@ async def add_card(message: types.Message):
     # Ensure the command is a reply to a message
     if not message.reply_to_message:
         await message.reply(
-            "❗ **Erro:** Responda a uma mensagem contendo a imagem e a legenda do card.",
+            "❗ **Erro:** Responda a uma mensagem contendo a imagem ou o arquivo do card e a legenda.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
 
-    # Ensure the replied message contains an image
-    if not message.reply_to_message.photo:
+    # Extract the image file ID
+    photo_file_id = None
+    if message.reply_to_message.photo:
+        # Get the highest resolution image
+        photo_file_id = message.reply_to_message.photo[-1].file_id
+    elif message.reply_to_message.document:
+        # Check if the document is an image
+        document = message.reply_to_message.document
+        valid_extensions = {".jpg", ".jpeg", ".png"}
+        if not any(document.file_name.lower().endswith(ext) for ext in valid_extensions):
+            await message.reply(
+                "❗ **Erro:** O arquivo enviado não é uma imagem válida. Apenas formatos `.jpg`, `.jpeg` e `.png` são aceitos.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        photo_file_id = document.file_id
+    else:
         await message.reply(
-            "❗ **Erro:** A mensagem respondida deve conter uma imagem do card.",
+            "❗ **Erro:** A mensagem respondida deve conter uma imagem ou um arquivo de imagem válido.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -49,8 +65,7 @@ async def add_card(message: types.Message):
         )
         return
 
-    # Extract image file ID and caption
-    photo_file_id = message.reply_to_message.photo[-1].file_id  # Get the highest resolution image
+    # Extract the caption
     caption = message.reply_to_message.caption
 
     # Parse the caption (e.g., "[nome do card] | [nome do grupo] | [nome da categoria] | [tag] | [raridade]")
