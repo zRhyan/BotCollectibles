@@ -4,9 +4,8 @@ import random
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
-from aiogram.types import InputMediaPhoto
+from aiogram.types import InputMediaPhoto, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, CallbackQuery
 from sqlalchemy import select, func
 from database.session import get_session
 from database.models import User, Card, Inventory, Category, Group
@@ -16,12 +15,11 @@ router = Router()
 @router.message(Command(commands=["cap", "capturar"]))
 async def capturar_command(message: types.Message):
     """
-    Handles the initial /cap or /capturar command.
-    1) Check if user is registered
-    2) Check if user has pokebolas
-    3) Show an inline keyboard of categories
+    Handles the initial /cap or /capturar command in a group.
+    1) Checks if user is registered.
+    2) Checks if user has pokebolas.
+    3) Shows an inline keyboard of categories with user-specific callback data.
     """
-
     user_id = message.from_user.id
 
     async with get_session() as session:
@@ -54,23 +52,21 @@ async def capturar_command(message: types.Message):
             )
             return
 
-        # Build inline keyboard
-        # We'll arrange categories in pairs per row, for a neat layout
+        # Build inline keyboard and include the user_id in the callback data to isolate actions.
         keyboard = InlineKeyboardBuilder()
         for index, cat in enumerate(categories):
+            # Callback data now has the format: choose_cat_{user_id}_{category_id}
             keyboard.button(
                 text=cat.name.upper(),
-                callback_data=f"choose_cat_{cat.id}"
+                callback_data=f"choose_cat_{user_id}_{cat.id}"
             )
-            # After placing 2 buttons in a row, start a new row
             if (index + 1) % 2 == 0:
                 keyboard.adjust(2)
-
-        # If there's an odd number of categories, finalize the layout
+        # Finalize layout if odd number of buttons
         keyboard.adjust(2)
 
         msg_text = (
-            "⚡️ Está na hora de capturar! Selecione uma das categorias.\n\n"
+            f"⚡️ @{message.from_user.username or 'Treinador'}, está na hora de capturar! Selecione uma das categorias.\n\n"
             f"🧶 Você tem {user.pokeballs} pokebolas.\n\n"
         )
 
@@ -84,16 +80,27 @@ async def capturar_command(message: types.Message):
 async def handle_category_choice(callback: CallbackQuery):
     """
     Handles the user tapping on a category button:
-    1) Deduct 1 pokebola from the user
-    2) Determine card rarity by random probability
-    3) Select a random card of that category with that rarity
-    4) Add card to user's inventory
-    5) Show the result with an image + stats
+    1) Verifies that the callback is from the correct user.
+    2) Deducts 1 pokebola from the user.
+    3) Determines card rarity by random probability.
+    4) Selects a random card from that category with the chosen rarity.
+    5) Adds the card to the user's inventory.
+    6) Shows the result with an image + stats.
     """
-    user_id = callback.from_user.id
     data_parts = callback.data.split("_")
-    # e.g. "choose_cat_13" => ["choose","cat","13"]
-    category_id = int(data_parts[2])  # in this example, 13
+    # Expected format: "choose_cat_{user_id}_{category_id}"
+    if len(data_parts) < 4:
+        await callback.answer("Dados inválidos.", show_alert=True)
+        return
+
+    expected_user_id = int(data_parts[2])
+    if callback.from_user.id != expected_user_id:
+        # Notify the user that they are not allowed to use this button.
+        await callback.answer("Você não pode usar este botão.", show_alert=True)
+        return
+
+    category_id = int(data_parts[3])
+    user_id = callback.from_user.id
 
     async with get_session() as session:
         # Get the user
@@ -118,7 +125,7 @@ async def handle_category_choice(callback: CallbackQuery):
         await session.commit()
 
         # ---------- Step 2: Determine rarity by random probability ----------
-        # 🥉 = 50%, 🥈 = 30%, 🥇 = 20%
+        # Probabilities: 🥉 = 50%, 🥈 = 30%, 🥇 = 20%
         roll = random.random()  # 0.0 <= roll < 1.0
         if roll < 0.50:
             chosen_rarity = "🥉"
@@ -127,9 +134,7 @@ async def handle_category_choice(callback: CallbackQuery):
         else:
             chosen_rarity = "🥇"
 
-        # ---------- Step 3: Get a random card in that category + chosen rarity ----------
-        # Card has no category_id. Instead: Card -> group -> group.category_id
-        # So we join Card.group and filter by Group.category_id
+        # ---------- Step 3: Get a random card in that category with chosen rarity ----------
         card_result = await session.execute(
             select(Card)
             .join(Card.group)
@@ -139,7 +144,7 @@ async def handle_category_choice(callback: CallbackQuery):
         )
         card = card_result.scalar_one_or_none()
 
-        # If no card found for that rarity, fallback to ANY card in that category
+        # If no card found for that rarity, fallback to any card in that category.
         if not card:
             card_result = await session.execute(
                 select(Card)
@@ -171,18 +176,13 @@ async def handle_category_choice(callback: CallbackQuery):
         else:
             new_inv = Inventory(user_id=user_id, card_id=card.id, quantity=1)
             session.add(new_inv)
-
         await session.commit()
 
         # ---------- Step 5: Show the result to the user ----------
-        # e.g. send an image + caption with card data
         category_obj = await session.get(Category, category_id)
         category_name = category_obj.name if category_obj else "Desconhecida"
 
-        # Fetch the user's nickname
         user_nickname = callback.from_user.username or "Treinador"
-
-        # Prepare the message caption
         caption = (
             f"🎰 Que sorte, @{user_nickname}! você acabou de capturar um pokecard.\n\n"
             f"{chosen_rarity}{card.id}. {card.name} (1x)\n"
@@ -190,9 +190,8 @@ async def handle_category_choice(callback: CallbackQuery):
             f"🎒Pokébolas restantes: {user.pokeballs}"
         )
 
-        # If you store card images via Telegram file_id
+        # If you store card images via Telegram file_id, edit the message to show the card image.
         if card.image_file_id:
-            # We'll edit the same message to show the card image
             await callback.message.edit_media(
                 media=types.InputMediaPhoto(
                     media=card.image_file_id,
@@ -202,8 +201,12 @@ async def handle_category_choice(callback: CallbackQuery):
                 reply_markup=None
             )
         else:
-            # If no image, just edit the text
+            # Fallback to text if no image is available.
             await callback.message.edit_text(
                 caption,
                 parse_mode=ParseMode.MARKDOWN
             )
+
+# Note:
+# Ensure that your bot’s command scope in groups is properly configured to accept commands with a bot username,
+# such as `/capturar@BotUsername`, which is important in group settings.
