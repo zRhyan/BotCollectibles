@@ -8,6 +8,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.enums import ParseMode
 from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
+import logging
 
 from database.session import get_session
 from database.models import User
