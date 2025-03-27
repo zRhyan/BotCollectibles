@@ -190,6 +190,7 @@ async def handle_category_choice(callback: CallbackQuery):
             f"🎰 Que sorte, @{user_nickname}! você acabou de capturar um pokecard.\n\n"
             f"{final_rarity}{card.id}. {card.name} (1x)\n"
             f"📚 {category_name}\n\n"
+            f"🃏 Você agora tem {inv_item.quantity if inv_item else 1} deste card.\n\n"
             f"🎒Pokébolas restantes: {user.pokeballs}"
         )
 

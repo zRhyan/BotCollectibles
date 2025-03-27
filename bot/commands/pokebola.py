@@ -4,10 +4,9 @@ from aiogram.filters import Command
 from sqlalchemy import select
 from database.session import get_session
 from database.models import Card, Group, Category, Tag
+from sqlalchemy.orm import joinedload
 
 router = Router()
-
-from sqlalchemy.orm import joinedload
 
 @router.message(Command(commands=["pokebola", "pb"]))
 async def pokebola_command(message: types.Message):
@@ -41,7 +40,8 @@ async def pokebola_command(message: types.Message):
                 )
                 .where(Card.id == card_id)
             )
-            card = result.scalar_one_or_none()
+            # Call unique() to remove duplicates from joined eager loads
+            card = result.unique().scalar_one_or_none()
         else:
             result = await session.execute(
                 select(Card)
@@ -51,7 +51,8 @@ async def pokebola_command(message: types.Message):
                 )
                 .where(Card.name.ilike(f"%{args}%"))
             )
-            cards = result.scalars().all()
+            # Call unique() before extracting scalars
+            cards = result.unique().scalars().all()
 
             if len(cards) == 0:
                 await message.reply(
