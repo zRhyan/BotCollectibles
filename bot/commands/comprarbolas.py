@@ -21,11 +21,28 @@ async def comprarbolas_command(message: types.Message):
     text_parts = message.text.split(maxsplit=1)
     if len(text_parts) < 2:
         await message.reply(
-            "❗ **Erro:** Você precisa fornecer a quantidade de Pokébolas que deseja comprar.\n"
-            "Exemplo:\n"
-            "`/comprarbolas 10`",
+            "❗ **Erro:** Você precisa fornecer a quantidade de Pokébolas que deseja comprar.\n\n"
+            "💡 **Exemplo de uso:**\n"
+            "`/comprarbolas 10`\n\n"
+            "🎯 **Detalhes:**\n"
+            "Cada Pokebola custa **1250 pokecoins**.\n"
+            "💼 Certifique-se de ter pokecoins suficientes antes de realizar a compra!",
             parse_mode=ParseMode.MARKDOWN
         )
+        return
+
+    # Show the user's current Pokébolas count
+    async with get_session() as session:
+        result = await session.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+
+        if user:
+            await message.reply(
+                f"🎒 **Inventário Atual:**\n"
+                f"🎯 **Pokebolas:** {user.pokeballs}\n"
+                f"💰 **Pokecoins:** {user.coins}",
+                parse_mode=ParseMode.MARKDOWN
+            )
         return
 
     try:
@@ -40,7 +57,7 @@ async def comprarbolas_command(message: types.Message):
         return
 
     # Define the cost of Pokébolas
-    cost_per_pokebola = 5  # Example: 5 coins per Pokébola
+    cost_per_pokebola = 1250  # Example: 5 coins per Pokébola
     total_cost = quantity * cost_per_pokebola
 
     async with get_session() as session:
