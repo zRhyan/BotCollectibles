@@ -9,10 +9,14 @@ from database.session import get_session
 
 router = Router()
 
+# Temporary in-memory store for pending card sales, keyed by donor ID.
+pending_sales = {}
+
 @router.message(Command("venderc"))
 async def venderc_command(message: types.Message):
     """
     Handles the /venderc command for selling cards to the Pokémart.
+    Expected format: /venderc 5 x2, 4 x1, 3 x10
     """
     user_id = message.from_user.id
     text_parts = message.text.split(maxsplit=1)
@@ -28,13 +32,13 @@ async def venderc_command(message: types.Message):
     args = text_parts[1].strip()
     card_data = args.split(",")
 
-    # Parse card data
+    # Parse card data into a list of tuples (card_id, quantity)
     cards_to_sell = []
     for item in card_data:
         try:
-            card_id, quantity = item.strip().split("x")
-            card_id = int(card_id)
-            quantity = int(quantity)
+            card_id_str, quantity_str = item.strip().split("x")
+            card_id = int(card_id_str)
+            quantity = int(quantity_str)
             cards_to_sell.append((card_id, quantity))
         except ValueError:
             await message.reply(
@@ -43,8 +47,8 @@ async def venderc_command(message: types.Message):
             )
             return
 
-    # Fetch user and inventory
     async with get_session() as session:
+        # Fetch user and inventory
         result = await session.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
 
@@ -55,7 +59,6 @@ async def venderc_command(message: types.Message):
             )
             return
 
-        # Fetch inventory and validate cards
         result = await session.execute(
             select(Inventory).options(joinedload(Inventory.card)).where(Inventory.user_id == user_id)
         )
@@ -85,7 +88,10 @@ async def venderc_command(message: types.Message):
         confirmation_text += f"💵 **Total a receber:** `{total_value}` pokecoins\n\n"
         confirmation_text += "Deseja confirmar a venda?"
 
-        # Send confirmation message with buttons
+        # Store sale details for this donor.
+        pending_sales[user_id] = cards_to_sell
+
+        # Build confirmation inline keyboard.
         keyboard = InlineKeyboardBuilder()
         keyboard.button(text="✅ Vender", callback_data=f"confirm_sell_{user_id}")
         keyboard.button(text="❌ Cancelar", callback_data="cancel_sell")
@@ -102,14 +108,26 @@ async def venderc_command(message: types.Message):
 async def confirm_sell(callback: types.CallbackQuery):
     """
     Processes confirmation for selling cards.
+    Expects callback_data: "confirm_sell_{user_id}"
+    Retrieves the sale details from the temporary store.
     """
-    user_id = int(callback.data.split("_")[2])
+    try:
+        # Extract the donor's user_id from the callback data.
+        user_id = int(callback.data.split("_")[2])
+    except (IndexError, ValueError):
+        await callback.answer("Dados inválidos.", show_alert=True)
+        return
+
+    # Retrieve the stored sale details.
+    if user_id not in pending_sales:
+        await callback.answer("Nenhuma venda pendente encontrada.", show_alert=True)
+        return
+    cards_to_sell = pending_sales.pop(user_id)
 
     async with get_session() as session:
         # Fetch user and inventory
         result = await session.execute(select(User).where(User.id == user_id))
         user = result.scalar_one_or_none()
-
         if not user:
             await callback.answer("❌ Usuário não encontrado.", show_alert=True)
             return
@@ -120,11 +138,11 @@ async def confirm_sell(callback: types.CallbackQuery):
         inventory = result.scalars().all()
         inventory_dict = {item.card_id: item for item in inventory}
 
-        # Process the sale
         total_value = 0
-        for card_id, quantity in callback.message.text.splitlines():
+        # Process each card sale using the stored list.
+        for card_id, quantity in cards_to_sell:
             if card_id not in inventory_dict or inventory_dict[card_id].quantity < quantity:
-                await callback.answer("❌ Erro ao processar a venda.", show_alert=True)
+                await callback.answer("❌ Erro ao processar a venda: quantidade insuficiente.", show_alert=True)
                 return
 
             card = inventory_dict[card_id].card
@@ -132,13 +150,13 @@ async def confirm_sell(callback: types.CallbackQuery):
             card_value = rarity_value.get(card.rarity, 0) * quantity
             total_value += card_value
 
-            # Deduct from inventory
+            # Deduct the sold quantity from inventory.
             inventory_item = inventory_dict[card_id]
             inventory_item.quantity -= quantity
             if inventory_item.quantity == 0:
                 await session.delete(inventory_item)
 
-            # Add to marketplace
+            # Create a new marketplace listing for each sold card.
             new_listing = Marketplace(
                 seller_id=user_id,
                 card_id=card_id,
@@ -146,7 +164,7 @@ async def confirm_sell(callback: types.CallbackQuery):
             )
             session.add(new_listing)
 
-        # Add coins to user
+        # Add the total sale value to the user's coins.
         user.coins += total_value
         await session.commit()
 
@@ -163,5 +181,9 @@ async def cancel_sell(callback: types.CallbackQuery):
     """
     Cancels any pending sale action.
     """
+    # Remove any pending sale if exists.
+    donor_id = callback.from_user.id
+    if donor_id in pending_sales:
+        pending_sales.pop(donor_id)
     await callback.message.edit_text("❌ Venda cancelada.", parse_mode=ParseMode.MARKDOWN)
     await callback.answer("Venda cancelada.", show_alert=True)
