@@ -1,11 +1,10 @@
 from math import ceil
 from aiogram import types, Router
+from aiogram.filters import Command
 from aiogram.enums import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
-from aiogram.filters import Command
-
 from database.session import get_session
 from database.models import User, Marketplace, Inventory, Card
 
@@ -16,7 +15,7 @@ PAGE_SIZE = 5
 pending_purchase = {}
 
 ##############################################################################
-# 1) DISPLAYING & PAGINATING CAPTURAS (THE "CARDS SOLD BY USERS") LIST
+# 1) DISPLAYING & PAGINATING CAPTURAS
 ##############################################################################
 
 async def pokemart_capturas(callback: types.CallbackQuery):
@@ -75,7 +74,6 @@ async def show_capturas_page(callback: types.CallbackQuery, page: int):
     else:
         text = "🃏 **Capturas**\n\n"
         for row in rows:
-            # row has: card_id, card_name, card_rarity, card_price, available
             text += (
                 f"{row.card_rarity} **{row.card_id}. {row.card_name}** "
                 f"- `{row.card_price}` pokecoins "
@@ -112,20 +110,6 @@ async def capturas_page(callback: types.CallbackQuery):
         return
     await show_capturas_page(callback, page=page)
 
-async def help_buy_capturas(callback: types.CallbackQuery):
-    """
-    Displays help instructions for buying Capturas.
-    """
-    help_text = (
-        "📖 **Como comprar Capturas:**\n\n"
-        "Envie um comando no seguinte formato para comprar:\n\n"
-        "```\n/pokemart capturas 5 x3, 6 x1\n```\n"
-        "Isso significa que você deseja comprar 3 unidades do card com ID 5 "
-        "e 1 unidade do card com ID 6.\n\n"
-        "Certifique-se de ter pokecoins suficientes para a compra."
-    )
-    await callback.answer(help_text, show_alert=True)
-
 ##############################################################################
 # 2) CAPTURAS PURCHASE COMMAND + CONFIRMATION
 ##############################################################################
@@ -139,13 +123,12 @@ async def pokemart_subcommand_handler(message: types.Message):
     text = message.text.strip()
     parts = text.split(maxsplit=2)
     # If user only typed /pokemart, or second token != "capturas", do nothing:
-    # the main /pokemart (in a different file) can handle the menu.
+    # the main /pokemart can handle the menu.
     if len(parts) < 2 or parts[1].lower() != "capturas":
-        return  # return means we skip further logic here
+        return  # simply return
 
     # We have: /pokemart capturas ...
     if len(parts) < 3:
-        # User typed "/pokemart capturas" with no actual order
         await message.reply(
             "❗ **Erro:** faltam argumentos. Exemplo:\n"
             "`/pokemart capturas 5 x2, 9 x1`",
@@ -169,7 +152,7 @@ async def pokemart_subcommand_handler(message: types.Message):
             )
             return
 
-    # Now, check if user can buy that many
+    # Check if user can buy that many
     async with get_session() as session:
         # sum the cost & verify each card's availability
         total_cost = 0
@@ -180,12 +163,12 @@ async def pokemart_subcommand_handler(message: types.Message):
             available = result.scalar() or 0
             if available < qty:
                 await message.reply(
-                    f"❌ **Erro:** Você pediu `{qty}` para card ID `{card_id}`, mas só há `{available}` disponível(s).",
+                    f"❌ **Erro:** Você pediu `{qty}` do card ID `{card_id}`, mas só há `{available}` disponível(s).",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
 
-            # get the price from one listing (they're all the same for that card_id)
+            # get the price from one listing (assuming the same price for all)
             listing_q = select(Marketplace).where(Marketplace.card_id == card_id).limit(1)
             result = await session.execute(listing_q)
             single_list = result.scalar_one_or_none()
@@ -223,8 +206,13 @@ async def pokemart_subcommand_handler(message: types.Message):
     confirm_text = "⚠️ **Confirmação de Compra**\n\nVocê quer comprar:\n\n"
     async with get_session() as session:
         for (card_id, qty) in orders:
-            # just fetch a single listing to show card info
-            listing_q = select(Marketplace).options(joinedload(Marketplace.card)).where(Marketplace.card_id == card_id).limit(1)
+            # fetch a single listing to show card info
+            listing_q = (
+                select(Marketplace)
+                .options(joinedload(Marketplace.card))
+                .where(Marketplace.card_id == card_id)
+                .limit(1)
+            )
             result = await session.execute(listing_q)
             listing = result.scalar_one_or_none()
             if listing:
@@ -305,7 +293,6 @@ async def confirm_buy(callback: types.CallbackQuery):
         buyer.coins -= total_cost
         await session.commit()
 
-    # Edit message
     await callback.message.edit_text(
         f"✅ **Compra concluída!**\nVocê gastou `{total_cost}` pokecoins e recebeu os cards.",
         parse_mode=ParseMode.MARKDOWN
@@ -328,14 +315,13 @@ async def cancel_buy(callback: types.CallbackQuery):
 
 router = Router()
 
-# This handles the subcommand logic for "/pokemart capturas ..."
+# Remove old help_buy_capturas import/registration from here. (Now in pokemart_help_capturas.py)
+
 router.message.register(pokemart_subcommand_handler, Command("pokemart"))
 
-# Callback queries: pagination, help, confirm, cancel
 router.callback_query.register(capturas_page, lambda call: call.data.startswith("capturas_page_"))
-router.callback_query.register(help_buy_capturas, lambda call: call.data == "help_buy_capturas")
 router.callback_query.register(confirm_buy, lambda call: call.data.startswith("confirm_buy_"))
 router.callback_query.register(cancel_buy, lambda call: call.data == "cancel_buy")
 
-# This callback is triggered by button: callback_data="pokemart_capturas"
+# This callback is triggered by the button with callback_data="pokemart_capturas"
 router.callback_query.register(pokemart_capturas, lambda call: call.data.startswith("pokemart_capturas"))
