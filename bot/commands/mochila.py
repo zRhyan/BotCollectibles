@@ -69,7 +69,6 @@ async def send_mochila_page(
       🎒Uau, @nickname! encontrei na sua mochila o seguinte pokecard
 
       🥇20. Karina (1x)
-      📚 aespa
 
     page: current page number
     nickname: the user’s nickname from DB
@@ -87,10 +86,8 @@ async def send_mochila_page(
     for i, (inv, card, group, category) in enumerate(page_items, start=start_index + 1):
         # Rarity is assumed to be an emoji like 🥇 or 🥈 or 🥉
         # Example: 🥇20. Karina (1x)
-        # Next line: 📚 aespa
         line = (
             f"{card.rarity}{card.id}. {card.name} ({inv.quantity}x)\n"  # first line
-            f"📚 {category.name}"  # second line
         )
         lines.append(line)
 

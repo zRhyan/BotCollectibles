@@ -3,7 +3,7 @@ from aiogram.enums import ParseMode
 from aiogram.filters import Command
 from sqlalchemy import select
 from database.session import get_session
-from database.models import Card, Group, Category, Tag
+from database.models import Card, Group, Category, Tag, Inventory
 from sqlalchemy.orm import joinedload
 
 router = Router()
@@ -76,20 +76,33 @@ async def pokebola_command(message: types.Message):
             )
             return
 
+        # Check if the user has the card in their inventory
+        inventory_item = await session.execute(
+            select(Inventory)
+            .where(Inventory.user_id == message.from_user.id, Inventory.card_id == card.id)
+        )
+        inventory_item = inventory_item.scalar_one_or_none()
+
+        if not inventory_item:
+            await message.reply(
+                "❌ **Erro:** Você não possui este card na sua mochila.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
         # Fetch related details
         group = card.group
         category = group.category if group else None
         tags = {tag.name for tag in card.tags}  # Use a set to ensure uniqueness
-        tags_str = ", ".join(tags) if tags else "Nenhuma"
+        tags_str = f"🏷️ {', '.join(tags)}\n" if tags else ""
 
         # Prepare the response
         caption = (
-            f"🆔 **ID:** {card.id}\n"
-            f"🃏 **Nome:** {card.name}\n"
-            f"📂 **Categoria:** {category.name if category else 'Nenhuma'}\n"
-            f"📁 **Grupo:** {group.name if group else 'Nenhum'}\n"
-            f"✨ **Raridade:** {card.rarity}\n"
-            f"🏷️ **Tags:** {tags_str}"
+            f"🎒Uau, @{message.from_user.username or 'usuário'}! encontrei na sua mochila o seguinte pokecard\n\n"
+            f"🥇{card.id}. {card.name} ({inventory_item.quantity}x)\n"
+            f"📚 {group.name if group else 'Nenhum'}\n"
+            f"{tags_str}"
+            "======================"
         )
 
         # Send the card image with the caption
