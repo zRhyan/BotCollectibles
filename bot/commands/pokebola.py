@@ -96,7 +96,7 @@ async def pokebola_command(message: types.Message):
         tags = {tag.name for tag in card.tags}  # Use a set to ensure uniqueness
         tags_str = f"🏷️ {', '.join(tags)}\n" if tags else ""
 
-        # Prepare the response
+        # Prepare the response caption
         caption = (
             f"🎒Uau, @{message.from_user.username or 'usuário'}! encontrei na sua mochila o seguinte pokecard\n\n"
             f"🥇{card.id}. {card.name} ({inventory_item.quantity}x)\n"
@@ -105,9 +105,32 @@ async def pokebola_command(message: types.Message):
             "======================"
         )
 
-        # Send the card image with the caption
-        await message.answer_photo(
-            photo=card.image_file_id,
-            caption=caption,
-            parse_mode=ParseMode.MARKDOWN
-        )
+        # Handle the card's image properly
+        if card.image_file_id:
+            try:
+                # First, try sending as a photo
+                await message.answer_photo(
+                    photo=card.image_file_id,
+                    caption=caption,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                # If the error is due to a document being sent as a photo, send as document
+                if "can't use file of type Document as Photo" in str(e):
+                    await message.answer_document(
+                        document=card.image_file_id,
+                        caption=caption,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                else:
+                    # Fallback to text for any other error
+                    await message.reply(
+                        caption,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+        else:
+            # Fallback to text if no image is available
+            await message.reply(
+                caption,
+                parse_mode=ParseMode.MARKDOWN
+            )
