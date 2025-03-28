@@ -90,19 +90,20 @@ async def pokebola_command(message: types.Message):
             )
             return
 
-        # Fetch related details
+        # Construção do caption formatado corretamente
         group = card.group
-        category = group.category if group else None
-        tags = {tag.name for tag in card.tags}  # Use a set to ensure uniqueness
-        tags_str = f"🏷️ {', '.join(tags)}\n" if tags else ""
+        category = group.name if group else "Nenhum"
+        tags = [tag.name for tag in card.tags]  # lista, pode estar vazia
+        has_tags = len(tags) > 0
 
-        # Prepare the response caption
+        # Linha da tag, se existir
+        tag_line = f"🏷️ {', '.join(tags)}\n" if has_tags else ""
+
         caption = (
             f"🎒Uau, @{message.from_user.username or 'usuário'}! encontrei na sua mochila o seguinte pokecard\n\n"
-            f"🥇{card.id}. {card.name} ({inventory_item.quantity}x)\n"
-            f"📚 {group.name if group else 'Nenhum'}\n"
-            f"{tags_str}"
-            "======================"
+            f"{card.rarity}{card.id}. {card.name} ({inventory_item.quantity}x)\n"
+            f"📚 {category}\n"
+            f"{tag_line}"
         )
 
         # Handle the card's image properly
