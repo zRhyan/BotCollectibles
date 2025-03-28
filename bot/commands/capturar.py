@@ -4,7 +4,7 @@ import random
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
-from aiogram.types import InputMediaPhoto, CallbackQuery
+from aiogram.types import InputMediaPhoto, InputMediaDocument, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select, func
 from database.session import get_session
@@ -59,10 +59,10 @@ async def capturar_command(message: types.Message):
             )
             return
 
-        # Build inline keyboard with user-specific callback data.
+        # Build inline keyboard with user-specific callback data
         keyboard = InlineKeyboardBuilder()
         for index, cat in enumerate(categories):
-            # Callback data now has the format: choose_cat_{user_id}_{category_id}
+            # Callback data format: choose_cat_{user_id}_{category_id}
             keyboard.button(
                 text=cat.name.upper(),
                 callback_data=f"choose_cat_{user_id}_{cat.id}"
@@ -131,8 +131,7 @@ async def handle_category_choice(callback: CallbackQuery):
         user.pokeballs -= 1
         await session.commit()
 
-        # ---------- Step 2: Determine target rarity based on probability ----------
-        # Probabilities: 50% chance for bronze (🥉), 30% for silver (🥈), 20% for gold (🥇)
+        # Determine target rarity based on probability
         roll = random.random()  # 0.0 <= roll < 1.0
         if roll < 0.50:
             target_rarity = "🥉"
@@ -141,7 +140,7 @@ async def handle_category_choice(callback: CallbackQuery):
         else:
             target_rarity = "🥇"
 
-        # ---------- Step 3: Get a random card in that category with the target rarity ----------
+        # Get a random card in that category with the target rarity
         card_result = await session.execute(
             select(Card)
             .join(Card.group)
@@ -151,7 +150,7 @@ async def handle_category_choice(callback: CallbackQuery):
         )
         card = card_result.scalar_one_or_none()
 
-        # If no card found for the target rarity, fallback to any card in that category.
+        # If no card found for the target rarity, fallback to any card in that category
         if not card:
             card_result = await session.execute(
                 select(Card)
@@ -169,7 +168,7 @@ async def handle_category_choice(callback: CallbackQuery):
             )
             return
 
-        # ---------- Step 4: Add the card to the user's inventory ----------
+        # Add the card to the user's inventory
         inv_result = await session.execute(
             select(Inventory).where(
                 Inventory.user_id == user_id,
@@ -185,12 +184,11 @@ async def handle_category_choice(callback: CallbackQuery):
             session.add(new_inv)
         await session.commit()
 
-        # ---------- Step 5: Show the result to the user ----------
+        # Show the result to the user
         category_obj = await session.get(Category, category_id)
         category_name = category_obj.name if category_obj else "Desconhecida"
 
         user_nickname = callback.from_user.username or "Treinador"
-        # Use the actual rarity stored in the card record
         final_rarity = card.rarity
 
         caption = (
@@ -201,23 +199,38 @@ async def handle_category_choice(callback: CallbackQuery):
             f"🎒Pokébolas restantes: {user.pokeballs}"
         )
 
-        # If the card has an image stored via Telegram file_id, show it with the caption.
+        # Handle the card's image properly
         if card.image_file_id:
-            await callback.message.edit_media(
-                media=types.InputMediaPhoto(
-                    media=card.image_file_id,
-                    caption=caption,
-                    parse_mode=ParseMode.MARKDOWN
-                ),
-                reply_markup=None
-            )
+            try:
+                # First, try sending as a photo
+                await callback.message.edit_media(
+                    media=InputMediaPhoto(
+                        media=card.image_file_id,
+                        caption=caption,
+                        parse_mode=ParseMode.MARKDOWN
+                    ),
+                    reply_markup=None
+                )
+            except Exception as e:
+                # If the error is due to a document being sent as a photo, send as document
+                if "can't use file of type Document as Photo" in str(e):
+                    await callback.message.edit_media(
+                        media=InputMediaDocument(
+                            media=card.image_file_id,
+                            caption=caption,
+                            parse_mode=ParseMode.MARKDOWN
+                        ),
+                        reply_markup=None
+                    )
+                else:
+                    # Fallback to text for any other error
+                    await callback.message.edit_text(
+                        caption,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
         else:
-            # Fallback to text if no image is available.
+            # Fallback to text if no image is available
             await callback.message.edit_text(
                 caption,
                 parse_mode=ParseMode.MARKDOWN
             )
-
-# Note:
-# Ensure that your bot’s command scope in groups is properly configured to accept commands with a bot username,
-# such as `/capturar@BotUsername`, which is important in group settings.
