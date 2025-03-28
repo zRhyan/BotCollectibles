@@ -21,11 +21,14 @@ pending_purchase = {}  # { user_id: [ (card_id, qty), ... ] }
 ##############################################################################
 
 async def pokemart_capturas(callback: types.CallbackQuery):
-    await show_capturas_page(callback, 1)
+    """
+    Displays the 'Capturas' listing with pagination.
+    """
+    await show_capturas_page(callback, page=1)
 
 async def show_capturas_page(callback: types.CallbackQuery, page: int):
     async with get_session() as session:
-        # Count how many distinct "grouped" listings
+        # Count how many distinct "grouped" listings exist in normal rarities
         count_q = select(func.count(Card.id)).select_from(
             select(
                 Card.id.label("card_id"),
@@ -43,7 +46,7 @@ async def show_capturas_page(callback: types.CallbackQuery, page: int):
         total_listings = count_result.scalar() or 0
         total_pages = ceil(total_listings / PAGE_SIZE) if total_listings > 0 else 1
 
-        # Query page items
+        # Retrieve data for the current page
         offset_val = (page - 1) * PAGE_SIZE
         listings_q = (
             select(
@@ -74,7 +77,7 @@ async def show_capturas_page(callback: types.CallbackQuery, page: int):
                 f"(x{r.available} disponíveis)\n"
             )
 
-    # Inline keyboard
+    # Build inline keyboard
     keyboard = InlineKeyboardBuilder()
     if page > 1:
         keyboard.button(text="⬅️ Anterior", callback_data=f"capturas_page_{page-1}")
@@ -83,6 +86,8 @@ async def show_capturas_page(callback: types.CallbackQuery, page: int):
 
     # Add "Comprar Cards" button
     keyboard.button(text="🛒 Comprar Cards", callback_data="capturas_buy_cards")
+
+    # Return & help
     keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
     keyboard.button(text="❓ COMO COMPRAR", callback_data="help_buy_capturas")
     keyboard.adjust(1)
@@ -94,6 +99,9 @@ async def show_capturas_page(callback: types.CallbackQuery, page: int):
     )
 
 async def capturas_page(callback: types.CallbackQuery):
+    """
+    Handles pagination for Capturas listings.
+    """
     try:
         page = int(callback.data.split("_")[-1])
     except ValueError:
@@ -108,12 +116,14 @@ async def capturas_page(callback: types.CallbackQuery):
 async def capturas_buy_cards(callback: types.CallbackQuery):
     """
     Triggered when user clicks "Comprar Cards".
-    Sets user state to waiting_for_cards_input, and prompts user to type the ID/qty lines.
+    1) Sets user state to waiting_for_cards_input.
+    2) Sends a NEW message (not edit) with instructions to keep the listings visible above.
     """
     user_id = callback.from_user.id
     user_states[user_id] = "waiting_for_cards_input"
 
-    await callback.message.edit_text(
+    # Instead of editing the current CAPTURAS message, we send a new message
+    await callback.message.answer(
         "🤔 **Qual card você deseja comprar?**\n"
         "Envie uma mensagem neste formato, por exemplo:\n\n"
         "`1 x3, 4 x5`\n"
@@ -121,16 +131,22 @@ async def capturas_buy_cards(callback: types.CallbackQuery):
         "Envie agora:",
         parse_mode=ParseMode.MARKDOWN
     )
+    # We can optionally edit the original message to remove the inline keyboard
+    # or do nothing if we want the user to keep seeing the pagination
+    await callback.message.edit_reply_markup(reply_markup=None)
+
     await callback.answer()
 
 async def capturas_cards_input(message: types.Message):
     """
     Receives the text "ID xQuantidade, ID xQuantidade" from user.
-    Checks availability, then shows confirmation inline keyboard.
+    Verifies availability, then shows confirmation inline keyboard.
     """
     user_id = message.from_user.id
+
+    # Only process if user is in waiting state
     if user_states.get(user_id) != "waiting_for_cards_input":
-        return  # ignore if user is not in that state
+        return  # ignore
 
     raw_text = message.text.strip()
     items = raw_text.split(",")
@@ -149,7 +165,7 @@ async def capturas_cards_input(message: types.Message):
             )
             return
 
-    # Check availability
+    # Check availability & cost
     async with get_session() as session:
         total_cost = 0
         for (card_id, q) in orders:
@@ -162,7 +178,6 @@ async def capturas_cards_input(message: types.Message):
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
-            # get price from one listing
             single_q = select(Marketplace).where(Marketplace.card_id == card_id).limit(1)
             res = await session.execute(single_q)
             single_list = res.scalar_one_or_none()
@@ -174,6 +189,7 @@ async def capturas_cards_input(message: types.Message):
                 return
             total_cost += single_list.price * q
 
+        # Check user coins
         buyer_q = select(User).where(User.id == user_id)
         res = await session.execute(buyer_q)
         buyer = res.scalar_one_or_none()
@@ -190,7 +206,7 @@ async def capturas_cards_input(message: types.Message):
             )
             return
 
-    # If success, store orders, reset user state
+    # If success, store orders & reset state
     user_states[user_id] = None
     pending_purchase[user_id] = orders
 
@@ -198,24 +214,29 @@ async def capturas_cards_input(message: types.Message):
     confirm_text = "⚠️ **Confirmação de Compra**\n\nVocê quer comprar:\n\n"
     async with get_session() as session:
         for (card_id, q) in orders:
-            listing_q = select(Marketplace).options(joinedload(Marketplace.card)).where(Marketplace.card_id == card_id).limit(1)
+            listing_q = (
+                select(Marketplace)
+                .options(joinedload(Marketplace.card))
+                .where(Marketplace.card_id == card_id)
+                .limit(1)
+            )
             res = await session.execute(listing_q)
             listing = res.scalar_one_or_none()
             if listing:
-                confirm_text += (
-                    f"{listing.card.rarity} **{listing.card.id}. {listing.card.name}** - `{q}` unidades\n"
-                )
+                confirm_text += f"{listing.card.rarity} **{listing.card.id}. {listing.card.name}** - `{q}` unidades\n"
     confirm_text += f"\n💵 **Total:** `{total_cost}` pokecoins\n\nDeseja confirmar a compra?"
 
     kb = InlineKeyboardBuilder()
     kb.button(text="✅ Confirmar", callback_data=f"confirm_buy_{user_id}")
     kb.button(text="❌ Cancelar", callback_data="cancel_buy")
     kb.adjust(1)
+
+    # Send the confirmation as a new message
     await message.reply(confirm_text, parse_mode=ParseMode.MARKDOWN, reply_markup=kb.as_markup())
 
 async def confirm_buy(callback: types.CallbackQuery):
     """
-    Final step: remove the listings, add cards to buyer, deduct coins, etc.
+    Removes listings, adds cards, deducts coins.
     """
     try:
         buyer_id = int(callback.data.split("_")[2])
@@ -230,6 +251,7 @@ async def confirm_buy(callback: types.CallbackQuery):
 
     total_cost = 0
     async with get_session() as session:
+        # fetch buyer
         buyer_q = select(User).where(User.id == buyer_id)
         res = await session.execute(buyer_q)
         buyer = res.scalar_one_or_none()
@@ -239,15 +261,18 @@ async def confirm_buy(callback: types.CallbackQuery):
 
         for (card_id, q) in orders:
             listing_q = select(Marketplace).where(Marketplace.card_id == card_id).limit(q)
-            res = await session.execute(listing_q)
-            these = res.scalars().all()
-            if len(these) < q:
-                await callback.answer(f"❌ Erro: só há {len(these)} listings para card {card_id}.", show_alert=True)
+            r2 = await session.execute(listing_q)
+            found_listings = r2.scalars().all()
+            if len(found_listings) < q:
+                await callback.answer(
+                    f"❌ Erro: só há {len(found_listings)} listings para card {card_id}.",
+                    show_alert=True
+                )
                 return
-            for listing in these:
+            for listing in found_listings:
                 total_cost += listing.price
                 await session.delete(listing)
-                # inventory
+                # Add to buyer's inventory
                 inv_q = select(Inventory).where(Inventory.user_id == buyer_id, Inventory.card_id == card_id)
                 ires = await session.execute(inv_q)
                 inv_item = ires.scalar_one_or_none()
@@ -257,7 +282,7 @@ async def confirm_buy(callback: types.CallbackQuery):
                     new_inv = Inventory(user_id=buyer_id, card_id=card_id, quantity=1)
                     session.add(new_inv)
 
-        # check coins
+        # final coin check
         if buyer.coins < total_cost:
             await callback.answer(f"❌ Moedas insuficientes para {total_cost}!", show_alert=True)
             return

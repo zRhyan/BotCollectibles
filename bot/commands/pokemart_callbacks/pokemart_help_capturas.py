@@ -5,16 +5,18 @@ router = Router()
 
 async def help_buy_capturas(callback: types.CallbackQuery):
     """
-    Displays help instructions for buying Capturas.
+    Displays help instructions for buying Capturas in the new button-based flow.
     """
     help_text = (
         "📖 **Como comprar Capturas:**\n\n"
-        "Envie um comando no seguinte formato para comprar:\n\n"
-        "```\n/pokemart capturas 5 x3, 6 x1\n```\n"
-        "Isso significa que você deseja comprar 3 unidades do card com ID 5 "
-        "e 1 unidade do card com ID 6.\n\n"
-        "Certifique-se de ter pokecoins suficientes para a compra."
+        "1. Clique em **Comprar Cards**.\n"
+        "2. Será enviada uma nova mensagem solicitando que você informe o(s) card(s) e quantidade(s).\n"
+        "   Formato: `ID xQuantidade, ID xQuantidade, ...`\n"
+        "   Exemplo: `1 x3, 4 x2`\n\n"
+        "3. O bot calculará o custo total e perguntará se deseja confirmar ou cancelar.\n"
+        "4. Ao confirmar, as cartas serão compradas (se disponíveis) e adicionadas ao seu inventário."
     )
+    # Instead of editing, we'll send a new message so user can still see the listing
     await callback.message.answer(help_text, parse_mode=ParseMode.MARKDOWN)
 
 # Register the callback for the button: "help_buy_capturas"
