@@ -204,3 +204,6 @@ psycopg2-binary==2.9.10
 I am using FSM States to manage states.
 
 This document is the master guide for the initial development of the bot. Any new ideas or requirement changes should be added here to avoid losing context.
+
+
+Add the import, router, command menu (admin and non-admin) in main.py of this new command X  and also update the /help to show and explain this new command.
