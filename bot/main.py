@@ -25,6 +25,7 @@ from commands.doarcards import router as doarcards_router
 from commands.doarbolas import router as doarbolas_router
 from commands.doarcoins import router as doarcoins_router
 from commands.venderc import router as venderc_router
+from commands.roubar import router as roubar_router
 
 from admin_commands.addcarta import router as addcarta_router
 from admin_commands.rclicar import router as rclicar_router
@@ -95,6 +96,7 @@ dp.include_router(doarcards_router)
 dp.include_router(doarbolas_router)
 dp.include_router(doarcoins_router)
 dp.include_router(venderc_router) #Before pokemart. If it work I'm a happy man.
+dp.include_router(roubar_router)
 dp.include_router(pokemart_router)
 
 
@@ -125,6 +127,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="doarbolas", description="Doar pokebolas para outro treinador"),
         BotCommand(command="doarcoins", description="Doar pokecoins para outro treinador"),
         BotCommand(command="venderc", description="Vender cards para o Pokemart"),
+        BotCommand(command="roubar", description="Trocar cartas com outro treinador"),
     ]
     await bot.set_my_commands(commands)
 
@@ -146,6 +149,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="doarbolas", description="Doar pokebolas para outro treinador"),
         BotCommand(command="doarcoins", description="Doar pokecoins para outro treinador"),
         BotCommand(command="venderc", description="Vender cards para o Pokemart"),
+        BotCommand(command="roubar", description="Trocar cartas com outro treinador"),
     ]
 
     # Fetch the list of admin users from the database
