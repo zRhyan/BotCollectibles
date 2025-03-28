@@ -92,7 +92,7 @@ async def send_mochila_page(
         lines.append(line)
 
     # Join all lines with a blank line between each or just a newline
-    inventory_text = "\n\n".join(lines)
+    inventory_text = "\n".join(lines)
 
     text = (
         f"🎒Uau, @{nickname}! encontrei na sua mochila o seguinte pokecard\n\n"
