@@ -90,12 +90,12 @@ dp.include_router(admin_router)
 dp.include_router(pokebola_router)
 dp.include_router(rclicar_router)
 dp.include_router(rcoins_router)
-dp.include_router(venderc_router) #Before pokemart. If it work I'm a happy man.
-dp.include_router(pokemart_router)
 dp.include_router(comprarbolas_router)
 dp.include_router(doarcards_router)
 dp.include_router(doarbolas_router)
 dp.include_router(doarcoins_router)
+dp.include_router(venderc_router) #Before pokemart. If it work I'm a happy man.
+dp.include_router(pokemart_router)
 
 
 # Register the middleware
