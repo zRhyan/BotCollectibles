@@ -13,7 +13,17 @@ async def pokemart_command(message: types.Message):
     """
     Handles the /pokemart (or /pokem) command.
     Displays the main menu for the Pokémart.
+    This command is only available in private chats.
     """
+    # Check if the command is being used in a group
+    if message.chat.type != "private":
+        await message.reply(
+            "❌ Este comando não está disponível em grupos.\n"
+            "Por favor, use este comando em uma conversa privada com o bot.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
     user_id = message.from_user.id
 
     async with get_session() as session:

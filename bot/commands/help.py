@@ -20,8 +20,8 @@ async def help_command(message: Message):
         "🔹 `/pokemart` ou `/pokem` - Acesse o Pokémart para comprar cards especiais e capturas. 🛍️\n"
         "🔹 `/comprarbolas quantidade` - Compre Pokébolas para capturar mais cards. 🎯\n"
         "🔹 `/doarcards` - Doe cards para outros treinadores. 🎁\n"
-        "🔹 `/doarbolas` - Doe Pokébolas para outros treinadores. 🎁\n"
-        "🔹 `/doarcoins` - Doe Pokécoins para outros treinadores. 🎁\n\n"
+        "🔹 `/doarbolas` - Doe Pokebolas para outros treinadores. 🎁\n"
+        "🔹 `/doarcoins` - Doe Pokecoins para outros treinadores. 🎁\n\n"
         "Divirta-se e boa sorte na sua aventura! ⚡"
     )
     await message.answer(help_text, parse_mode=ParseMode.MARKDOWN)

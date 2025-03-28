@@ -17,7 +17,7 @@ async def doarcoins_command(message: types.Message):
     text_parts = message.text.split(maxsplit=1)
     if len(text_parts) < 2:
         await message.reply(
-            "❗ **Erro:** Especifique a quantidade de Pokécoins e o nickname do destinatário.\n"
+            "❗ **Erro:** Especifique a quantidade de Pokecoins e o nickname do destinatário.\n"
             "Exemplos:\n"
             "• `/doarcoins 50 nickname`\n"
             "• `/doarcoins * nickname`",
@@ -29,7 +29,7 @@ async def doarcoins_command(message: types.Message):
     parts = args.split()
     if len(parts) < 2:
         await message.reply(
-            "❗ **Erro:** Especifique a quantidade de Pokécoins e o nickname do destinatário.\n"
+            "❗ **Erro:** Especifique a quantidade de Pokecoins e o nickname do destinatário.\n"
             "Exemplos:\n"
             "• `/doarcoins 50 nickname`\n"
             "• `/doarcoins * nickname`",
@@ -77,7 +77,7 @@ async def doarcoins_command(message: types.Message):
 
     if donation_quantity <= 0 or donor.coins < donation_quantity:
         await message.reply(
-            f"❌ **Erro:** Você não tem Pokécoins suficientes para doar.\n"
+            f"❌ **Erro:** Você não tem Pokecoins suficientes para doar.\n"
             f"💰 **Suas Pokécoins:** {donor.coins}",
             parse_mode=ParseMode.MARKDOWN
         )
@@ -85,7 +85,7 @@ async def doarcoins_command(message: types.Message):
 
     # Confirmation step.
     await message.reply(
-        f"⚠️ **Confirmação:** Você está prestes a doar `{donation_quantity}` Pokécoins para `{nickname}`.\n"
+        f"⚠️ **Confirmação:** Você está prestes a doar `{donation_quantity}` Pokecoins para `{nickname}`.\n"
         "Clique em **Confirmar** para continuar ou ignore esta mensagem para cancelar.",
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=types.InlineKeyboardMarkup(
@@ -99,7 +99,7 @@ async def doarcoins_command(message: types.Message):
 @router.callback_query(lambda call: call.data.startswith("confirm_coins_"))
 async def confirm_coins_donation(callback: types.CallbackQuery):
     """
-    Processes confirmation for a Pokécoin donation.
+    Processes confirmation for a Pokecoin donation.
     Expected callback_data: "confirm_coins_{quantity}_{nickname}"
     """
     parts = callback.data.split("_")
@@ -126,7 +126,7 @@ async def confirm_coins_donation(callback: types.CallbackQuery):
             return
 
         if donor.coins < donation_quantity:
-            await callback.answer("Você não tem Pokécoins suficientes.", show_alert=True)
+            await callback.answer("Você não tem Pokecoins suficientes.", show_alert=True)
             return
 
         donor.coins -= donation_quantity
@@ -134,7 +134,7 @@ async def confirm_coins_donation(callback: types.CallbackQuery):
         await session.commit()
 
     await callback.message.edit_text(
-        f"✅ Doação concluída! Você doou {donation_quantity} Pokécoins para {nickname}.",
+        f"✅ Doação concluída! Você doou {donation_quantity} Pokecoins para {nickname}.",
         parse_mode=ParseMode.MARKDOWN
     )
     await callback.answer("Doação realizada com sucesso!", show_alert=True)
