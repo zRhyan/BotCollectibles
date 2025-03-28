@@ -8,7 +8,7 @@ from database.models import User
 # Import callback handlers
 from .pokemart_callbacks.pokemart_main_menu import pokemart_main_menu
 from .pokemart_callbacks.pokemart_event_cards import pokemart_event_cards
-from .pokemart_callbacks.pokemart_capturas import handle_capturas_subcommand
+# Remove the import for handle_capturas_subcommand because we no longer define it
 from .pokemart_callbacks.pokemart_capturas import router as capturas_router
 from .pokemart_callbacks.pokemart_help_capturas import router as help_capturas_router
 
@@ -26,26 +26,16 @@ router.callback_query.register(pokemart_event_cards, lambda call: call.data == "
 @router.message(Command(commands=["pokemart", "pokem"]))
 async def pokemart_command(message: types.Message):
     """
-    This single handler deals with both:
-      • /pokemart     => show main menu
-      • /pokemart capturas ... => handle subcommand
+    If user typed /pokemart with no arguments => show main menu.
+    (No longer checks for "capturas" subcommand, because we do that with inline flow.)
     """
-    # If user typed "/pokemart" alone => show the main menu
     text_parts = message.text.split(maxsplit=1)
-    if len(text_parts) == 1:
-        # no arguments => main menu
-        await show_main_menu_or_error(message)
-        return
+    if len(text_parts) > 1:
+        # The user typed something after "/pokemart", e.g. "/pokemart anything"
+        # Decide how to handle it. For now, just show menu or error.
+        pass
 
-    # If there is a second token, we check if it’s "capturas"
-    args = text_parts[1].strip()  # everything after /pokemart
-    if args.lower().startswith("capturas"):
-        # Let the subcommand logic parse "capturas 5 x3, 6 x1" and do the purchase flow
-        await handle_capturas_subcommand(message)
-    else:
-        # The user typed something else: /pokemart blah
-        # You can decide what to do: show error or show main menu.
-        await show_main_menu_or_error(message)
+    await show_main_menu_or_error(message)
 
 
 async def show_main_menu_or_error(message: types.Message):
