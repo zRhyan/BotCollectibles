@@ -7,10 +7,9 @@ from database.session import get_session
 from database.models import User
 
 # Import callback handlers
-from pokemart_callbacks.pokemart_main_menu import pokemart_main_menu
-from pokemart_callbacks.pokemart_event_cards import pokemart_event_cards
-from pokemart_callbacks.pokemart_capturas import pokemart_capturas
-
+from .pokemart_callbacks.pokemart_main_menu import pokemart_main_menu
+from .pokemart_callbacks.pokemart_event_cards import pokemart_event_cards
+from .pokemart_callbacks.pokemart_capturas import pokemart_capturas
 
 router = Router()
 
