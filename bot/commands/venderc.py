@@ -6,6 +6,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 from database.models import User, Inventory, Card, Marketplace
 from database.session import get_session
+import logging
 
 router = Router()
 
@@ -18,9 +19,11 @@ async def venderc_command(message: types.Message):
     Handles the /venderc command for selling cards to the Pokémart.
     Expected format: /venderc 5 x2, 4 x1, 3 x10
     """
+    logging.info(f"Processing /venderc command from user {message.from_user.id}")
     user_id = message.from_user.id
     text_parts = message.text.split(maxsplit=1)
     if len(text_parts) < 2:
+        logging.warning(f"Invalid /venderc command format from user {message.from_user.id}")
         await message.reply(
             "❗ **Erro:** Você precisa especificar os IDs dos cards e as quantidades para vender.\n"
             "Exemplo:\n"
@@ -30,6 +33,7 @@ async def venderc_command(message: types.Message):
         return
 
     args = text_parts[1].strip()
+    logging.info(f"Parsed arguments for /venderc: {args}")
     card_data = args.split(",")
 
     # Parse card data into a list of tuples (card_id, quantity)
