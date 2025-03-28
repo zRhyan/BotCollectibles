@@ -20,27 +20,26 @@ async def comprarbolas_command(message: types.Message):
     # Parse the command arguments
     text_parts = message.text.split(maxsplit=1)
     if len(text_parts) < 2:
-        await message.reply(
-            "❗ **Erro:** Você precisa fornecer a quantidade de Pokébolas que deseja comprar.\n\n"
-            "💡 **Exemplo de uso:**\n"
-            "`/comprarbolas 10`\n\n"
-            "🎯 **Detalhes:**\n"
-            "Cada Pokebola custa **1250 pokecoins**.\n"
-            "💼 Certifique-se de ter pokecoins suficientes antes de realizar a compra!",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
+        async with get_session() as session:
+            # Fetch the user from the database
+            result = await session.execute(select(User).where(User.id == message.from_user.id))
+            user = result.scalar_one_or_none()
 
-    # Show the user's current Pokébolas count
-    async with get_session() as session:
-        result = await session.execute(select(User).where(User.id == user_id))
-        user = result.scalar_one_or_none()
+            if not user:
+                await message.reply(
+                    "❌ **Erro:** Você ainda não está registrado no sistema. Use o comando `/jornada` para começar sua aventura.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
 
-        if user:
             await message.reply(
-                f"🎒 **Inventário Atual:**\n"
-                f"🎯 **Pokebolas:** {user.pokeballs}\n"
-                f"💰 **Pokecoins:** {user.coins}",
+                "❗ **Erro:** Você precisa fornecer a quantidade de Pokébolas que deseja comprar.\n\n"
+                "💡 **Exemplo de uso:**\n"
+                "`/comprarbolas 10`\n\n"
+                "🎯 **Detalhes:**\n"
+                "Cada Pokébola custa **1250 pokecoins**.\n\n"
+                f"💰 **Suas pokecoins:** {user.coins}\n"
+                f"🎯 **Suas Pokébolas:** {user.pokeballs}",
                 parse_mode=ParseMode.MARKDOWN
             )
         return
