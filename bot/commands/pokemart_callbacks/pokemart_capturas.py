@@ -1,21 +1,24 @@
 from math import ceil
-from aiogram import types, Router
-from aiogram.filters import Command
+from aiogram import types, Router, F
 from aiogram.enums import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
+
 from database.session import get_session
 from database.models import User, Marketplace, Inventory, Card
 
-# Number of listings per page
+# Number of marketplace listings to show per page
 PAGE_SIZE = 5
 
-# Temporary store for pending purchase orders (keyed by buyer id)
-pending_purchase = {}
+# 1) Temporary store for user "state" => which step they're in
+user_states = {}  # { user_id: "waiting_for_cards_input" | None }
+
+# 2) Store purchase details (card ids and quantities) for confirmation
+pending_purchase = {}  # { user_id: [ (card_id, quantity), ... ] }
 
 ##############################################################################
-# 1) DISPLAYING & PAGINATING CAPTURAS
+#  A) DISPLAYING & PAGINATING CAPTURAS
 ##############################################################################
 
 async def pokemart_capturas(callback: types.CallbackQuery):
@@ -80,13 +83,16 @@ async def show_capturas_page(callback: types.CallbackQuery, page: int):
                 f"(x{row.available} disponíveis)\n"
             )
 
-    # Build inline keyboard for pagination & “COMO COMPRAR” button
+    # Build inline keyboard:
     keyboard = InlineKeyboardBuilder()
     # Pagination
     if page > 1:
         keyboard.button(text="⬅️ Anterior", callback_data=f"capturas_page_{page-1}")
     if page < total_pages:
         keyboard.button(text="Próxima ➡️", callback_data=f"capturas_page_{page+1}")
+
+    # "Comprar Cards" -> triggers user to provide "1 x3, 4 x2," etc.
+    keyboard.button(text="🛒 Comprar Cards", callback_data="capturas_buy_cards")
     # Return & help
     keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
     keyboard.button(text="❓ COMO COMPRAR", callback_data="help_buy_capturas")
@@ -101,7 +107,6 @@ async def show_capturas_page(callback: types.CallbackQuery, page: int):
 async def capturas_page(callback: types.CallbackQuery):
     """
     Handles pagination for Capturas listings.
-    Callback data format: "capturas_page_{page}"
     """
     try:
         page = int(callback.data.split("_")[-1])
@@ -111,35 +116,45 @@ async def capturas_page(callback: types.CallbackQuery):
     await show_capturas_page(callback, page=page)
 
 ##############################################################################
-# 2) CAPTURAS PURCHASE COMMAND + CONFIRMATION
+# B) FLOW FOR BUYING CARDS
 ##############################################################################
 
-async def pokemart_subcommand_handler(message: types.Message):
+async def capturas_buy_cards(callback: types.CallbackQuery):
     """
-    Single handler for /pokemart commands.
-    If user typed "/pokemart" with no args => do nothing, let main menu handle it.
-    If user typed "/pokemart capturas ..." => parse purchase order.
+    Triggered when user clicks "Comprar Cards" in the Capturas menu.
+    We set the user's state to waiting_for_cards_input,
+    and prompt them to enter "ID xQuantidade" pairs.
     """
-    text = message.text.strip()
-    parts = text.split(maxsplit=2)
-    # If user only typed /pokemart, or second token != "capturas", do nothing:
-    # the main /pokemart can handle the menu.
-    if len(parts) < 2 or parts[1].lower() != "capturas":
-        return  # simply return
+    user_id = callback.from_user.id
+    user_states[user_id] = "waiting_for_cards_input"
 
-    # We have: /pokemart capturas ...
-    if len(parts) < 3:
-        await message.reply(
-            "❗ **Erro:** faltam argumentos. Exemplo:\n"
-            "`/pokemart capturas 5 x2, 9 x1`",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
+    await callback.message.edit_text(
+        "🤔 **Qual card você deseja comprar?**\n"
+        "Envie uma mensagem neste formato, por exemplo:\n\n"
+        "`1 x3, 4 x5`\n"
+        "Isso significa 3 cards do card_id=1 e 5 cards do card_id=4.\n\n"
+        "Envie agora:",
+        parse_mode=ParseMode.MARKDOWN
+    )
+    await callback.answer()
 
-    order_str = parts[2]
+async def capturas_cards_input(message: types.Message):
+    """
+    This receives the user's typed input of "ID xQuantidade" pairs.
+    Then we parse it, check availability, store for confirmation, and show the confirm message.
+    """
+    user_id = message.from_user.id
+
+    # Check if user is actually in waiting_for_cards_input state
+    if user_states.get(user_id) != "waiting_for_cards_input":
+        return  # ignore this message if they're not in that state
+
+    # user typed something like: "1 x3, 4 x5"
+    raw_text = message.text.strip()
+    items = raw_text.split(",")
+
     orders = []
-    for item in order_str.split(","):
-        # each item = "ID xQuantidade"
+    for item in items:
         try:
             card_id_str, qty_str = item.strip().split("x")
             card_id = int(card_id_str)
@@ -147,85 +162,77 @@ async def pokemart_subcommand_handler(message: types.Message):
             orders.append((card_id, quantity))
         except ValueError:
             await message.reply(
-                f"❌ **Erro:** Formato inválido para `{item}`. Use: `ID xQuantidade`.",
+                f"❌ **Erro:** Formato inválido em `{item}`. Use: `ID xQuantidade`.",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
 
-    # Check if user can buy that many
+    # We'll check availability + cost
     async with get_session() as session:
-        # sum the cost & verify each card's availability
         total_cost = 0
         for (card_id, qty) in orders:
-            # Count how many single "listings" are available for this card_id
-            ccount_q = select(func.count(Marketplace.id)).where(Marketplace.card_id == card_id)
-            result = await session.execute(ccount_q)
+            # how many single listings are available?
+            cnt_q = select(func.count(Marketplace.id)).where(Marketplace.card_id == card_id)
+            result = await session.execute(cnt_q)
             available = result.scalar() or 0
             if available < qty:
                 await message.reply(
-                    f"❌ **Erro:** Você pediu `{qty}` do card ID `{card_id}`, mas só há `{available}` disponível(s).",
+                    f"❌ **Erro:** Você pediu `{qty}` do card ID `{card_id}`, mas só há `{available}` disponível.",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
 
-            # get the price from one listing (assuming the same price for all)
+            # get the price from one listing (assuming same price for that card id)
             listing_q = select(Marketplace).where(Marketplace.card_id == card_id).limit(1)
             result = await session.execute(listing_q)
             single_list = result.scalar_one_or_none()
             if not single_list:
                 await message.reply(
-                    f"❌ **Erro:** Nenhuma listing encontrada para card ID `{card_id}`.",
+                    f"❌ **Erro:** Nenhuma listing para card ID `{card_id}`.",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
             total_cost += single_list.price * qty
 
         # Check buyer's coin balance
-        buyer_q = select(User).where(User.id == message.from_user.id)
+        buyer_q = select(User).where(User.id == user_id)
         result = await session.execute(buyer_q)
         buyer = result.scalar_one_or_none()
         if not buyer:
             await message.reply(
-                "❌ **Erro:** Usuário não encontrado. Registre-se com `/jornada`.",
+                "❌ **Erro:** Você ainda não se registrou. Use `/jornada`.",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
         if buyer.coins < total_cost:
             await message.reply(
-                f"❌ **Erro:** Moedas insuficientes.\n"
-                f"Precisa: `{total_cost}` pokecoins, tem apenas `{buyer.coins}`.",
+                f"❌ **Erro:** Você precisa de `{total_cost}` pokecoins, mas tem `{buyer.coins}`.",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
 
-    # If we got here, user can afford it and there are enough listings
-    # Let's store the purchase in pending_purchase for confirmation
-    pending_purchase[message.from_user.id] = orders
+    # If successful => store in pending_purchase, user leaves the input state
+    pending_purchase[user_id] = orders
+    user_states[user_id] = None  # reset their state
 
-    # Build a confirmation text
+    # Summarize
     confirm_text = "⚠️ **Confirmação de Compra**\n\nVocê quer comprar:\n\n"
     async with get_session() as session:
         for (card_id, qty) in orders:
-            # fetch a single listing to show card info
             listing_q = (
                 select(Marketplace)
                 .options(joinedload(Marketplace.card))
-                .where(Marketplace.card_id == card_id)
-                .limit(1)
+                .where(Marketplace.card_id == card_id).limit(1)
             )
             result = await session.execute(listing_q)
             listing = result.scalar_one_or_none()
             if listing:
-                confirm_text += (
-                    f"{listing.card.rarity} **{listing.card.id}. {listing.card.name}** "
-                    f"- `{qty}` unidades\n"
-                )
-
+                confirm_text += f"{listing.card.rarity} **{listing.card.id}. {listing.card.name}** - `{qty}` unidades\n"
     confirm_text += f"\n💵 **Total:** `{total_cost}` pokecoins\n\nDeseja confirmar a compra?"
 
-    # Build inline keyboard
+    # inline keyboard => confirm or cancel
     kb = InlineKeyboardBuilder()
-    kb.button(text="✅ Confirmar", callback_data=f"confirm_buy_{message.from_user.id}")
+    kb.button(text="✅ Confirmar", callback_data=f"confirm_buy_{user_id}")
     kb.button(text="❌ Cancelar", callback_data="cancel_buy")
     kb.adjust(1)
 
@@ -234,7 +241,7 @@ async def pokemart_subcommand_handler(message: types.Message):
 async def confirm_buy(callback: types.CallbackQuery):
     """
     Final step: remove the listings from marketplace, add cards to user,
-    deduct cost from user’s coins.
+    deduct cost from user’s coins, etc.
     """
     try:
         buyer_id = int(callback.data.split("_")[2])
@@ -249,7 +256,7 @@ async def confirm_buy(callback: types.CallbackQuery):
 
     total_cost = 0
     async with get_session() as session:
-        # Get buyer
+        # get buyer
         buyer_q = select(User).where(User.id == buyer_id)
         result = await session.execute(buyer_q)
         buyer = result.scalar_one_or_none()
@@ -257,9 +264,8 @@ async def confirm_buy(callback: types.CallbackQuery):
             await callback.answer("Usuário não encontrado.", show_alert=True)
             return
 
-        # For each card, remove exactly 'qty' marketplace rows
+        # remove the listings from marketplace
         for (card_id, qty) in orders:
-            # get 'qty' rows
             listings_q = select(Marketplace).where(Marketplace.card_id == card_id).limit(qty)
             result = await session.execute(listings_q)
             these_listings = result.scalars().all()
@@ -269,21 +275,21 @@ async def confirm_buy(callback: types.CallbackQuery):
                     show_alert=True
                 )
                 return
-            # Summation + remove from marketplace
             for listing in these_listings:
                 total_cost += listing.price
                 await session.delete(listing)
-                # Add card to buyer's inventory
+
+                # add to buyer's inventory
                 inv_q = select(Inventory).where(Inventory.user_id == buyer_id, Inventory.card_id == card_id)
-                inv_result = await session.execute(inv_q)
-                inv_item = inv_result.scalar_one_or_none()
+                inv_res = await session.execute(inv_q)
+                inv_item = inv_res.scalar_one_or_none()
                 if inv_item:
                     inv_item.quantity += 1
                 else:
                     new_inv = Inventory(user_id=buyer_id, card_id=card_id, quantity=1)
                     session.add(new_inv)
 
-        # Deduct coins
+        # check if buyer has enough coins (again, in case time passed)
         if buyer.coins < total_cost:
             await callback.answer(
                 f"❌ Moedas insuficientes para o custo final de {total_cost}!",
@@ -293,6 +299,7 @@ async def confirm_buy(callback: types.CallbackQuery):
         buyer.coins -= total_cost
         await session.commit()
 
+    # success
     await callback.message.edit_text(
         f"✅ **Compra concluída!**\nVocê gastou `{total_cost}` pokecoins e recebeu os cards.",
         parse_mode=ParseMode.MARKDOWN
@@ -310,15 +317,23 @@ async def cancel_buy(callback: types.CallbackQuery):
     await callback.answer("Compra cancelada.", show_alert=True)
 
 ##############################################################################
-# 3) ROUTER & REGISTRATIONS
+#  ROUTER & REGISTRATIONS
 ##############################################################################
 
 router = Router()
 
-# We DO NOT register handle_capturas_subcommand as a Command handler here,
-# because we call it directly from the main pokemart_command in pokemart.py
-
-router.callback_query.register(pokemart_capturas, lambda call: call.data.startswith("pokemart_capturas"))
+# Callback for pagination
 router.callback_query.register(capturas_page, lambda call: call.data.startswith("capturas_page_"))
+# Callback for "Comprar Cards" button
+router.callback_query.register(capturas_buy_cards, lambda call: call.data == "capturas_buy_cards")
+
+# Confirm/cancel purchase
 router.callback_query.register(confirm_buy, lambda call: call.data.startswith("confirm_buy_"))
 router.callback_query.register(cancel_buy, lambda call: call.data == "cancel_buy")
+
+# Show CAPTURAS listings
+router.callback_query.register(pokemart_capturas, lambda call: call.data.startswith("pokemart_capturas"))
+
+# The text input from user for "ID xQuantidade"
+# We'll use a normal message handler with no command filter, but check user_states
+router.message.register(capturas_cards_input, F.text)
