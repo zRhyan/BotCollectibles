@@ -315,13 +315,10 @@ async def cancel_buy(callback: types.CallbackQuery):
 
 router = Router()
 
-# Remove old help_buy_capturas import/registration from here. (Now in pokemart_help_capturas.py)
+# We DO NOT register handle_capturas_subcommand as a Command handler here,
+# because we call it directly from the main pokemart_command in pokemart.py
 
-router.message.register(pokemart_subcommand_handler, Command("pokemart"))
-
+router.callback_query.register(pokemart_capturas, lambda call: call.data.startswith("pokemart_capturas"))
 router.callback_query.register(capturas_page, lambda call: call.data.startswith("capturas_page_"))
 router.callback_query.register(confirm_buy, lambda call: call.data.startswith("confirm_buy_"))
 router.callback_query.register(cancel_buy, lambda call: call.data == "cancel_buy")
-
-# This callback is triggered by the button with callback_data="pokemart_capturas"
-router.callback_query.register(pokemart_capturas, lambda call: call.data.startswith("pokemart_capturas"))
