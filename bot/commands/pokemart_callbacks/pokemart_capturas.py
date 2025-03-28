@@ -1,16 +1,17 @@
 from math import ceil
-from aiogram import types
+from aiogram import types, Router
 from aiogram.enums import ParseMode
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import select, func
 from sqlalchemy.orm import joinedload
+from aiogram.filters import Command
+
 from database.session import get_session
 from database.models import User, Marketplace, Inventory, Card
-from aiogram.filters import Command
-from aiogram.exceptions import SkipHandler
 
 # Number of listings per page
 PAGE_SIZE = 5
+
 # Temporary store for pending purchase orders (keyed by buyer id)
 pending_purchase = {}
 
@@ -26,35 +27,39 @@ async def show_capturas_page(callback: types.CallbackQuery, page: int):
     Helper function to display marketplace listings with pagination.
     """
     async with get_session() as session:
-        # Count total listings with normal rarities.
+        # Count the total listings that have normal rarities (🥇, 🥈, 🥉).
         count_result = await session.execute(
             select(func.count()).select_from(
                 select(Marketplace)
                 .join(Marketplace.card)
-                .where(Marketplace.card.has(Marketplace.card.rarity.in_(["🥇", "🥈", "🥉"])))
+                # Using `.has(...)` to filter by rarity, must refer to `Card.rarity`.
+                .where(Card.rarity.in_(["🥇", "🥈", "🥉"]))
                 .subquery()
             )
         )
         total_listings = count_result.scalar() or 0
         total_pages = ceil(total_listings / PAGE_SIZE) if total_listings > 0 else 1
 
+        # Retrieve listings for the specified page
         result = await session.execute(
             select(Marketplace)
             .options(joinedload(Marketplace.card))
             .join(Marketplace.card)
-            .where(Marketplace.card.has(Marketplace.card.rarity.in_(["🥇", "🥈", "🥉"])))
+            .where(Card.rarity.in_(["🥇", "🥈", "🥉"]))
             .limit(PAGE_SIZE)
             .offset((page - 1) * PAGE_SIZE)
         )
         listings = result.scalars().all()
 
+    # Prepare the text for display
     if not listings:
         text = "🃏 **Capturas**\n\nNenhum card está à venda no momento."
     else:
         text = "🃏 **Capturas**\n\n"
         for listing in listings:
             text += f"{listing.card.rarity} **{listing.card.id}. {listing.card.name}** - `{listing.price}` pokecoins\n"
-    # Build pagination and help keyboard.
+
+    # Build inline keyboard for pagination and a help button
     keyboard = InlineKeyboardBuilder()
     if page > 1:
         keyboard.button(text="⬅️ Anterior", callback_data=f"capturas_page_{page-1}")
@@ -63,7 +68,12 @@ async def show_capturas_page(callback: types.CallbackQuery, page: int):
     keyboard.button(text="⬅️ Voltar", callback_data="pokemart_main_menu")
     keyboard.button(text="❓ COMO COMPRAR", callback_data="help_buy_capturas")
     keyboard.adjust(1)
-    await callback.message.edit_text(text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
+
+    await callback.message.edit_text(
+        text, 
+        reply_markup=keyboard.as_markup(), 
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 async def capturas_page(callback: types.CallbackQuery):
     """
@@ -85,7 +95,8 @@ async def help_buy_capturas(callback: types.CallbackQuery):
         "📖 **Como comprar Capturas:**\n\n"
         "Envie um comando no seguinte formato para comprar:\n\n"
         "```\n/pokemart capturas 5 x3, 6 x1\n```\n"
-        "Isso significa que você deseja comprar 3 unidades do card com ID 5 e 1 unidade do card com ID 6.\n\n"
+        "Isso significa que você deseja comprar 3 unidades do card com ID 5 "
+        "e 1 unidade do card com ID 6.\n\n"
         "Certifique-se de ter pokecoins suficientes para a compra."
     )
     await callback.answer(help_text, show_alert=True)
@@ -98,8 +109,11 @@ async def capturas_purchase_handler(message: types.Message):
     """
     text = message.text.strip()
     parts = text.split(maxsplit=2)
+
+    # If this isn't a purchase command, simply return (instead of SkipHandler).
     if len(parts) < 3 or parts[1].lower() != "capturas":
-        raise SkipHandler()
+        return
+
     order_str = parts[2].strip()
     orders = []
     for item in order_str.split(","):
@@ -115,6 +129,7 @@ async def capturas_purchase_handler(message: types.Message):
             )
             return
 
+    # Verify availability and calculate total cost
     async with get_session() as session:
         total_cost = 0
         for card_id, quantity in orders:
@@ -132,6 +147,7 @@ async def capturas_purchase_handler(message: types.Message):
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
+
             result = await session.execute(
                 select(Marketplace)
                 .where(Marketplace.card_id == card_id)
@@ -146,6 +162,7 @@ async def capturas_purchase_handler(message: types.Message):
                 return
             total_cost += listing.price * quantity
 
+        # Fetch buyer
         result = await session.execute(select(User).where(User.id == message.from_user.id))
         buyer = result.scalar_one_or_none()
         if not buyer:
@@ -154,6 +171,7 @@ async def capturas_purchase_handler(message: types.Message):
                 parse_mode=ParseMode.MARKDOWN
             )
             return
+
         if buyer.coins < total_cost:
             await message.reply(
                 f"❌ **Erro:** Moedas insuficientes. Você precisa de `{total_cost}` pokecoins, mas possui apenas `{buyer.coins}`.",
@@ -161,10 +179,11 @@ async def capturas_purchase_handler(message: types.Message):
             )
             return
 
-    # Store purchase details for confirmation.
+    # Store purchase details for confirmation
     pending_purchase[message.from_user.id] = orders
 
     confirm_text = "⚠️ **Confirmação de Compra**\n\nVocê está prestes a comprar:\n\n"
+    # Summarize all cards being purchased
     for card_id, quantity in orders:
         async with get_session() as session:
             result = await session.execute(
@@ -175,11 +194,14 @@ async def capturas_purchase_handler(message: types.Message):
             listing = result.scalar_one_or_none()
         if listing:
             confirm_text += f"{listing.card.rarity} **{listing.card.id}. {listing.card.name}** - `{quantity}` unidades\n"
+
     confirm_text += f"\n💵 **Total a pagar:** `{total_cost}` pokecoins\n\nDeseja confirmar a compra?"
+
     keyboard = InlineKeyboardBuilder()
     keyboard.button(text="✅ Confirmar", callback_data=f"confirm_buy_{message.from_user.id}")
     keyboard.button(text="❌ Cancelar", callback_data="cancel_buy")
     keyboard.adjust(1)
+
     await message.reply(confirm_text, reply_markup=keyboard.as_markup(), parse_mode=ParseMode.MARKDOWN)
 
 async def confirm_buy(callback: types.CallbackQuery):
@@ -199,6 +221,7 @@ async def confirm_buy(callback: types.CallbackQuery):
     orders = pending_purchase.pop(buyer_id)
 
     async with get_session() as session:
+        # Fetch the buyer
         result = await session.execute(select(User).where(User.id == buyer_id))
         buyer = result.scalar_one_or_none()
         if not buyer:
@@ -207,6 +230,7 @@ async def confirm_buy(callback: types.CallbackQuery):
 
         total_cost = 0
         for card_id, quantity in orders:
+            # Retrieve exactly 'quantity' listings for the same card
             result = await session.execute(
                 select(Marketplace)
                 .where(Marketplace.card_id == card_id)
@@ -214,22 +238,30 @@ async def confirm_buy(callback: types.CallbackQuery):
             )
             listings = result.scalars().all()
             if len(listings) < quantity:
-                await callback.answer(f"❌ Erro: Listings insuficientes para o card ID {card_id}.", show_alert=True)
+                await callback.answer(
+                    f"❌ Erro: Listings insuficientes para o card ID {card_id}.",
+                    show_alert=True
+                )
                 return
+
+            # Delete each listing and give the card to the buyer
             for listing in listings:
                 price = listing.price
                 total_cost += price
                 await session.delete(listing)
-                result = await session.execute(
-                    select(Inventory).where(Inventory.user_id == buyer_id, Inventory.card_id == card_id)
+
+                inv_result = await session.execute(
+                    select(Inventory)
+                    .where(Inventory.user_id == buyer_id, Inventory.card_id == card_id)
                 )
-                inv_item = result.scalar_one_or_none()
+                inv_item = inv_result.scalar_one_or_none()
                 if inv_item:
                     inv_item.quantity += 1
                 else:
-                    from database.models import Inventory
                     new_inv = Inventory(user_id=buyer_id, card_id=card_id, quantity=1)
                     session.add(new_inv)
+
+        # Deduct total cost from buyer
         buyer.coins -= total_cost
         await session.commit()
 
@@ -249,17 +281,21 @@ async def cancel_buy(callback: types.CallbackQuery):
     await callback.message.edit_text("❌ Compra cancelada.", parse_mode=ParseMode.MARKDOWN)
     await callback.answer("Compra cancelada.", show_alert=True)
 
-# Import or define the router instance.
-from aiogram import Router
+# Create a dedicated router for this module
 router = Router()
 
-# Register purchase order handler.
-def register_handlers(router):
+# Register the message handler and callbacks
+def register_handlers(router: Router):
+    # A message filter for "/pokemart capturas" purchases
     router.message.register(capturas_purchase_handler, Command("pokemart"))
-    router.callback_query.register(confirm_buy, lambda call: call.data.startswith("confirm_buy_"))
-# Ensure the router is passed to the handler registration function.
-register_handlers(router)
-router.callback_query.register(capturas_page, lambda call: call.data.startswith("capturas_page_"))
-router.callback_query.register(help_buy_capturas, lambda call: call.data == "help_buy_capturas")
 
+    # Callback query handlers for buying
+    router.callback_query.register(confirm_buy, lambda call: call.data.startswith("confirm_buy_"))
+    router.callback_query.register(cancel_buy, lambda call: call.data == "cancel_buy")
+
+    # Callback query handlers for pagination and help text
+    router.callback_query.register(capturas_page, lambda call: call.data.startswith("capturas_page_"))
+    router.callback_query.register(help_buy_capturas, lambda call: call.data == "help_buy_capturas")
+
+# Finally, register them on this router.
 register_handlers(router)
