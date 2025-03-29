@@ -26,6 +26,7 @@ from commands.doarbolas import router as doarbolas_router
 from commands.doarcoins import router as doarcoins_router
 from commands.venderc import router as venderc_router
 from commands.roubar import router as roubar_router
+from commands.pokedex import router as pokedex_router
 
 from admin_commands.addcarta import router as addcarta_router
 from admin_commands.rclicar import router as rclicar_router
@@ -84,6 +85,7 @@ dp.message.register(help_command, Command("help"))
 #------------------------------------------------------
 dp.include_router(jornada_router)
 dp.include_router(mochila_router)
+dp.include_router(pokedex_router)
 dp.include_router(pokebanco_router)
 dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
