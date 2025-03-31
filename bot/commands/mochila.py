@@ -14,17 +14,9 @@ MOCHILA_CALLBACK = "mochila_page_{page}"
 
 @router.message(Command("mochila"))
 async def mochila_command(message: types.Message):
-    """
-    The /mochila command:
-      1. Fetch the user's nickname and inventory from the database
-      2. If empty, show a message that the mochila is empty
-      3. Otherwise, paginate the results (10 items per page)
-      4. Display the first page
-    """
     user_id = message.from_user.id
 
     async with get_session() as session:
-        # Get the user record to access user.nickname
         user_db = await session.get(User, user_id)
         if not user_db:
             await message.answer(
@@ -33,8 +25,6 @@ async def mochila_command(message: types.Message):
             )
             return
 
-        # Fetch user inventory (joined with Card->Group->Category)
-        # Order by Card.id ASC (as requested)
         result = await session.execute(
             select(Inventory, Card, Group, Category)
             .join(Card, Inventory.card_id == Card.id)
@@ -43,7 +33,7 @@ async def mochila_command(message: types.Message):
             .where(Inventory.user_id == user_id)
             .order_by(Card.id.asc())
         )
-        inventory = result.all()  # list of (Inventory, Card, Group, Category) tuples
+        inventory = result.all()
 
         if not inventory:
             await message.answer(
@@ -54,53 +44,43 @@ async def mochila_command(message: types.Message):
             )
             return
 
-        # Display the first page of items
-        await send_mochila_page(message, inventory, page=1, nickname=user_db.nickname)
+        await send_mochila_page(message, inventory, page=1, nickname=user_db.nickname, fav_card_id=user_db.fav_card_id, fav_emoji=user_db.fav_emoji)
+
 
 async def send_mochila_page(
     message_or_callback: types.Message | CallbackQuery,
     inventory: list,
     page: int,
-    nickname: str
+    nickname: str,
+    fav_card_id: int | None = None,
+    fav_emoji: str | None = None
 ):
-    """
-    Sends (or edits) a paginated list of cards in the user’s mochila.
-    10 items per page. The text format is:
-      🎒Uau, @nickname! encontrei na sua mochila o seguinte pokecard
-
-      🥇20. Karina (1x)
-
-    page: current page number
-    nickname: the user’s nickname from DB
-    """
     items_per_page = 10
     start_index = (page - 1) * items_per_page
     end_index = start_index + items_per_page
     total_pages = (len(inventory) + items_per_page - 1) // items_per_page
 
-    # Build the lines for this page
-    # Each item is (Inventory, Card, Group, Category)
     page_items = inventory[start_index:end_index]
 
     lines = []
+    fav_card = None
     for i, (inv, card, group, category) in enumerate(page_items, start=start_index + 1):
-        # Rarity is assumed to be an emoji like 🥇 or 🥈 or 🥉
-        # Example: 🥇20. Karina (1x)
-        line = (
-            f"{card.rarity}{card.id}. {card.name} ({inv.quantity}x)\n"  # first line
-        )
+        line = f"{card.rarity}{card.id}. {card.name} ({inv.quantity}x)"
         lines.append(line)
+        if fav_card_id and card.id == fav_card_id:
+            fav_card = card
 
-    # Join all lines with a blank line between each or just a newline
     inventory_text = "\n".join(lines)
+    
+    header = f"🎒Uau, @{nickname}! encontrei na sua mochila o seguinte pokecard\n\n"
+
+    if fav_card_id and fav_emoji and fav_card:
+        header = f"{fav_emoji} {fav_card.id}. {fav_card.name}\n\n" + header
 
     text = (
-        f"🎒Uau, @{nickname}! encontrei na sua mochila o seguinte pokecard\n\n"
-        f"{inventory_text}\n\n"
-        f"Página {page}/{total_pages}"
+        header + inventory_text + f"\n\nPágina {page}/{total_pages}"
     )
 
-    # Build pagination keyboard using InlineKeyboardBuilder
     keyboard = InlineKeyboardBuilder()
 
     if page > 1:
@@ -115,33 +95,46 @@ async def send_mochila_page(
             callback_data=MOCHILA_CALLBACK.format(page=page + 1)
         )
 
-    keyboard.adjust(2)  # set 2 buttons per row
+    keyboard.adjust(2)
 
-    # If the call is from a callback, use edit_text; else use answer()
     if isinstance(message_or_callback, CallbackQuery):
-        await message_or_callback.message.edit_text(
-            text,
-            reply_markup=keyboard.as_markup(),
-            parse_mode=ParseMode.MARKDOWN
-        )
+        if fav_card and fav_card.image_file_id:
+            await message_or_callback.message.edit_media(
+                media=types.InputMediaPhoto(
+                    media=fav_card.image_file_id,
+                    caption=text,
+                    parse_mode=ParseMode.MARKDOWN
+                ),
+                reply_markup=keyboard.as_markup()
+            )
+        else:
+            await message_or_callback.message.edit_text(
+                text,
+                reply_markup=keyboard.as_markup(),
+                parse_mode=ParseMode.MARKDOWN
+            )
     else:
-        await message_or_callback.answer(
-            text,
-            reply_markup=keyboard.as_markup(),
-            parse_mode=ParseMode.MARKDOWN
-        )
+        if fav_card and fav_card.image_file_id:
+            await message_or_callback.answer_photo(
+                photo=fav_card.image_file_id,
+                caption=text,
+                reply_markup=keyboard.as_markup(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await message_or_callback.answer(
+                text,
+                reply_markup=keyboard.as_markup(),
+                parse_mode=ParseMode.MARKDOWN
+            )
+
 
 @router.callback_query(lambda call: call.data.startswith("mochila_page_"))
 async def mochila_pagination_callback(callback: CallbackQuery):
-    """
-    Handles pagination callbacks. Extracts the page from the callback data
-    and re-fetches the user's inventory. Then calls send_mochila_page.
-    """
     page = int(callback.data.split("_")[-1])
     user_id = callback.from_user.id
 
     async with get_session() as session:
-        # Get user & nickname
         user_db = await session.get(User, user_id)
         if not user_db:
             await callback.message.edit_text(
@@ -150,7 +143,6 @@ async def mochila_pagination_callback(callback: CallbackQuery):
             )
             return
 
-        # Re-fetch inventory
         result = await session.execute(
             select(Inventory, Card, Group, Category)
             .join(Card, Inventory.card_id == Card.id)
@@ -161,5 +153,4 @@ async def mochila_pagination_callback(callback: CallbackQuery):
         )
         inventory = result.all()
 
-    # Send the requested page
-    await send_mochila_page(callback, inventory, page, nickname=user_db.nickname)
+    await send_mochila_page(callback, inventory, page, nickname=user_db.nickname, fav_card_id=user_db.fav_card_id, fav_emoji=user_db.fav_emoji)

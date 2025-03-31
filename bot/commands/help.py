@@ -17,6 +17,7 @@ async def help_command(message: Message):
         "🔹 `/pokebola` ou `/pb` cardid ou cardname - Visualize informações sobre um card. 🃏\n\n"
         "⚔️ **Comandos de Captura:**\n"
         "🔹 `/capturar` ou `/cap` - Tente capturar um card raro! 🎯\n"
+        "🔹 `/pokefav` - Favorite um card e um emoji! 💌"
         "🔹 `/roubar` - Troque cartas com outro treinador. Use o formato:\n"
         "   `/roubar id1 xqty1, id2 xqty2 X id3 xqty3, id4 xqty4` (responda à mensagem do outro treinador). 🔄\n\n"
         "🛒 **Comandos de Loja:**\n"

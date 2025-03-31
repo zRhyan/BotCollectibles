@@ -12,6 +12,8 @@ class User(Base):
     nickname = Column(String(20), unique=True, nullable=False)
     coins = Column(Integer, default=0)
     pokeballs = Column(Integer, default=0)
+    fav_card_id = Column(Integer, ForeignKey("cards.id"), nullable=True)
+    fav_emoji = Column(String(10), nullable=True)
     is_admin = Column(Integer, default=0)  # 0 = Not Admin, 1 = Admin
 
     # Relationship to inventory

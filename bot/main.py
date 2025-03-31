@@ -27,6 +27,7 @@ from commands.doarcoins import router as doarcoins_router
 from commands.venderc import router as venderc_router
 from commands.roubar import router as roubar_router
 from commands.pokedex import router as pokedex_router
+from commands.favpoke import router as favpoke_router
 
 from admin_commands.addcarta import router as addcarta_router
 from admin_commands.rclicar import router as rclicar_router
@@ -90,6 +91,7 @@ dp.include_router(mochila_router)
 dp.include_router(pokebanco_router)
 dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
+dp.include_router(favpoke_router)
 dp.include_router(imgpd_router)
 dp.include_router(admin_router)
 dp.include_router(pokebola_router)
@@ -133,6 +135,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="doarcoins", description="Doar pokecoins para outro treinador"),
         BotCommand(command="venderc", description="Vender cards para o Pokemart"),
         BotCommand(command="roubar", description="Trocar cartas com outro treinador"),
+        BotCommand(command="favpoke", description="Definir seu card favorito"),
     ]
     await bot.set_my_commands(commands)
 
@@ -157,6 +160,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="doarcoins", description="Doar pokecoins para outro treinador"),
         BotCommand(command="venderc", description="Vender cards para o Pokemart"),
         BotCommand(command="roubar", description="Trocar cartas com outro treinador"),
+        BotCommand(command="favpoke", description="Definir seu card favorito"),
     ]
 
     # Fetch the list of admin users from the database
@@ -175,10 +179,10 @@ async def set_bot_commands(bot: Bot):
 # Run the bot
 async def main():
     # Comment this if you want to reset the database schema
-    await create_db()
+    # await create_db()
 
     # Recreate the database schema. Uncomment this if you want to reset the database schema
-    # await recreate_database()
+    await recreate_database()
 
     # Set bot commands
     await set_bot_commands(bot)
