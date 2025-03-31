@@ -31,6 +31,7 @@ from commands.pokedex import router as pokedex_router
 from admin_commands.addcarta import router as addcarta_router
 from admin_commands.rclicar import router as rclicar_router
 from admin_commands.rcoins import router as rcoins_router
+from admin_commands.imgpd import router as imgpd_router
 
 # Import the database 
 from database.models import Base
@@ -89,6 +90,7 @@ dp.include_router(pokedex_router)
 dp.include_router(pokebanco_router)
 dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
+dp.include_router(imgpd_router)
 dp.include_router(admin_router)
 dp.include_router(pokebola_router)
 dp.include_router(rclicar_router)
@@ -124,6 +126,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="capturar", description="Capturar um card"),
         BotCommand(command="pokebola", description="Exibir informações sobre um card"),
         BotCommand(command="pokemart", description="Acessar o Pokémart"),
+        BotCommand(command="pokedex", description="Ver todas as coleções"),
         BotCommand(command="comprarbolas", description="Comprar Pokébolas"),
         BotCommand(command="doarcards", description="Doar cards para outro treinador"),
         BotCommand(command="doarbolas", description="Doar pokebolas para outro treinador"),
@@ -136,6 +139,7 @@ async def set_bot_commands(bot: Bot):
     # Admin-specific commands
     admin_commands = [
         BotCommand(command="addcarta", description="(Admin) Adicionar uma nova carta"),
+        BotCommand(command="imgpd", description="(Admin) Adicionar imagem a um grupo"),
         BotCommand(command="rclicar", description="(Admin) Distribuir pokebolas"),
         BotCommand(command="rcoins", description="(Admin) Distribuir pokecoins"),
         BotCommand(command="start", description="Iniciar o bot"),
@@ -146,6 +150,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="capturar", description="Capturar um card"),
         BotCommand(command="pokebola", description="Exibir informações sobre um card"),
         BotCommand(command="pokemart", description="Acessar o Pokémart"),
+        BotCommand(command="pokedex", description="Ver todas as coleções"),
         BotCommand(command="comprarbolas", description="Comprar Pokébolas"),
         BotCommand(command="doarcards", description="Doar cards para outro treinador"),
         BotCommand(command="doarbolas", description="Doar pokebolas para outro treinador"),

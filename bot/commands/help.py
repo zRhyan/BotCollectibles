@@ -13,6 +13,7 @@ async def help_command(message: Message):
         "🔹 `/jornada` - Inscreva-se e torne-se um treinador Pokémon! 🚀\n"
         "🔹 `/mochila` - Confira os itens que você carrega. 🎒\n"
         "🔹 `/pokebanco` - Veja suas riquezas no PokéBanco. 🏦\n"
+        "🔹 `/pokedex` ou `/pd`- Veja todas as coleções. 🗂\n"
         "🔹 `/pokebola` ou `/pb` cardid ou cardname - Visualize informações sobre um card. 🃏\n\n"
         "⚔️ **Comandos de Captura:**\n"
         "🔹 `/capturar` ou `/cap` - Tente capturar um card raro! 🎯\n"

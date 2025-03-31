@@ -42,6 +42,7 @@ class Group(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(50), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    image_file_id = Column(String(255), nullable=True)
 
     # Relationships
     category = relationship("Category", back_populates="groups")
