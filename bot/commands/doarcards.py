@@ -1,33 +1,41 @@
-from aiogram import Router, types
-from aiogram.filters import Command
+from aiogram import Router, types, F
 from aiogram.enums import ParseMode
-from sqlalchemy.future import select
+from aiogram.filters import Command, Text
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
+
+from sqlalchemy import select
 from sqlalchemy.orm import joinedload
+
 from database.models import User, Inventory, Card
 from database.session import get_session
 
 router = Router()
 
-# Temporary in-memory store for pending specific card donations.
-# In production, consider a persistent or per‑user FSM approach.
-pending_specific_donations = {}
+class DoarCardsState(StatesGroup):
+    """
+    States for the /doarcards command, using the aiogram v3 FSM.
+    """
+    WAITING_CONFIRMATION = State()
 
-@router.message(Command("doarcards"))
-async def doarcards_command(message: types.Message):
+@router.message(Command(commands=["doarcards"]))
+async def doarcards_command(message: types.Message, state: FSMContext) -> None:
     """
-    Handles the /doarcard command for donating cards.
+    Entry point for the /doarcards command.
+
     Expected formats:
-      • To donate all cards: /doarcard * <nickname>
-      • To donate specific cards: /doarcard <card_id xQuantidade, ...> <nickname>
+      - /doarcards * <nickname>          (to donate all cards)
+      - /doarcards <card_id xQ, ...> <nickname>
+        e.g. /doarcards 7 x3, 45 x2, 12 x5 nickname
     """
-    user_id = message.from_user.id
     text_parts = message.text.split(maxsplit=1)
     if len(text_parts) < 2:
         await message.reply(
             "❗ **Erro:** Especifique os cards que deseja doar e o nickname do destinatário.\n"
             "Exemplos:\n"
-            "• `/doarcard * nickname` para doar todos os seus cards\n"
-            "• `/doarcard 7 x3, 45 x2, 12 x5 nickname` para doar quantidades específicas.",
+            "• `/doarcards * nickname` para doar todos os seus cards\n"
+            "• `/doarcards 7 x3, 45 x2, 12 x5 nickname` para doar quantidades específicas.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -38,222 +46,254 @@ async def doarcards_command(message: types.Message):
         await message.reply("❗ **Erro:** Argumentos inválidos.", parse_mode=ParseMode.MARKDOWN)
         return
 
+    donor_id = message.from_user.id
+
+    # Check if user tries to donate all cards
     if tokens[0] == "*":
-        await handle_all_card_donation(args, message)
-    else:
-        await handle_specific_card_donation(args, message)
-
-
-async def handle_all_card_donation(args: str, message: types.Message):
-    """
-    Processes donation of all cards.
-    Expected format: "* <nickname>"
-    """
-    parts = args.split()
-    if len(parts) < 2:
-        await message.reply(
-            "❗ **Erro:** Especifique o nickname do destinatário.\n"
-            "Exemplo: `/doarcard * nickname`",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
-    nickname = parts[1]
-
-    # Verify recipient existence.
-    async with get_session() as session:
-        result = await session.execute(select(User).where(User.nickname == nickname))
-        recipient = result.scalar_one_or_none()
-    if not recipient:
-        await message.reply(
-            f"❌ **Erro:** Nenhum usuário encontrado com o nickname `{nickname}`.",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
-    # Confirmation step.
-    await message.reply(
-        f"⚠️ **Confirmação:** Você está prestes a doar todos os seus cards para `{nickname}`.\n"
-        "Clique em **Confirmar** para continuar ou ignore esta mensagem para cancelar.",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=types.InlineKeyboardMarkup(
-            inline_keyboard=[
-                [types.InlineKeyboardButton(text="✅ Confirmar", callback_data=f"confirm_card_all_{nickname}")],
-                [types.InlineKeyboardButton(text="❌ Cancelar", callback_data="cancel_donation")]
-            ]
-        )
-    )
-
-
-async def handle_specific_card_donation(args: str, message: types.Message):
-    """
-    Processes donation of specific cards.
-    Expected format: "<card_id xQuantidade, ...> <nickname>"
-    Ex.: /doarcard 7 x3, 45 x2, 12 x5 nickname
-    """
-    parts = args.rsplit(maxsplit=1)
-    if len(parts) < 2:
-        await message.reply(
-            "❗ **Erro:** Especifique os IDs dos cards, as quantidades e o nickname do destinatário.\n"
-            "Exemplo: `/doarcard 7 x3, 45 x2, 12 x5 nickname`",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
-    card_data = parts[0]
-    nickname = parts[1]
-
-    # Verify recipient existence.
-    async with get_session() as session:
-        result = await session.execute(select(User).where(User.nickname == nickname))
-        recipient = result.scalar_one_or_none()
-    if not recipient:
-        await message.reply(
-            f"❌ **Erro:** Nenhum usuário encontrado com o nickname `{nickname}`.",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
-    donations = []
-    for item in card_data.split(","):
-        try:
-            card_id_str, quantity_str = item.strip().split("x")
-            card_id = int(card_id_str)
-            quantity = int(quantity_str)
-            donations.append((card_id, quantity))
-        except ValueError:
+        # Format: /doarcards * <nickname>
+        if len(tokens) < 2:
             await message.reply(
-                f"❌ **Erro:** Formato inválido para o item `{item}`. Use o formato `ID xQuantidade`.",
+                "❗ **Erro:** Especifique o nickname do destinatário.\n"
+                "Exemplo: `/doarcards * nickname`",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
 
-    # Store the donation details temporarily using the donor's id.
-    pending_specific_donations[message.from_user.id] = donations
+        nickname = tokens[1]
+        donate_type = "all"
+        # We'll store these details in FSM.
+        async with get_session() as session:
+            recipient_res = await session.execute(
+                select(User).where(User.nickname == nickname)
+            )
+            recipient = recipient_res.scalar_one_or_none()
 
-    donation_list = "\n".join([f"- Card ID `{card_id}`: `{quantity}` unidades" for card_id, quantity in donations])
-    await message.reply(
-        f"⚠️ **Confirmação:** Você está prestes a doar os seguintes cards para `{nickname}`:\n"
-        f"{donation_list}\n\n"
-        "Clique em **Confirmar** para continuar ou ignore esta mensagem para cancelar.",
-        parse_mode=ParseMode.MARKDOWN,
-        reply_markup=types.InlineKeyboardMarkup(
-            inline_keyboard=[
-                [types.InlineKeyboardButton(text="✅ Confirmar", callback_data=f"confirm_specific_{nickname}")],
-                [types.InlineKeyboardButton(text="❌ Cancelar", callback_data="cancel_donation")]
-            ]
+        if not recipient:
+            await message.reply(
+                f"❌ **Erro:** Nenhum usuário encontrado com o nickname `{nickname}`.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        if recipient.id == donor_id:
+            await message.reply(
+                "❗ Você não pode doar cards para si mesmo.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        # Save in FSM data.
+        await state.update_data(
+            donate_type=donate_type,
+            nickname=nickname
         )
-    )
+
+        # Build confirmation.
+        await message.reply(
+            f"⚠️ **Confirmação:** Você está prestes a doar todos os seus cards para `{nickname}`.\n"
+            "Clique em **Confirmar** para continuar ou ignore esta mensagem para cancelar.",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="✅ Confirmar", callback_data="donation_confirm")],
+                    [InlineKeyboardButton(text="❌ Cancelar", callback_data="donation_cancel")]
+                ]
+            )
+        )
+        await state.set_state(DoarCardsState.WAITING_CONFIRMATION)
+
+    else:
+        # Format: /doarcards <card_id xQuant, ...> <nickname>
+        parts = args.rsplit(maxsplit=1)
+        if len(parts) < 2:
+            await message.reply(
+                "❗ **Erro:** Especifique os IDs dos cards, as quantidades e o nickname do destinatário.\n"
+                "Exemplo: `/doarcards 7 x3, 45 x2, 12 x5 nickname`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        card_data = parts[0]
+        nickname = parts[1]
+        donate_type = "specific"
+
+        async with get_session() as session:
+            recipient_res = await session.execute(
+                select(User).where(User.nickname == nickname)
+            )
+            recipient = recipient_res.scalar_one_or_none()
+
+        if not recipient:
+            await message.reply(
+                f"❌ **Erro:** Nenhum usuário encontrado com o nickname `{nickname}`.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        if recipient.id == donor_id:
+            await message.reply(
+                "❗ Você não pode doar cards para si mesmo.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        donations = []
+        for item in card_data.split(","):
+            try:
+                card_id_str, quantity_str = item.strip().split("x")
+                card_id = int(card_id_str)
+                quantity = int(quantity_str)
+                if quantity <= 0:
+                    await message.reply(
+                        f"❌ **Erro:** Quantidade inválida em `{item}`.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return
+                donations.append((card_id, quantity))
+            except ValueError:
+                await message.reply(
+                    f"❌ **Erro:** Formato inválido para o item `{item}`. Use `ID xQuantidade`.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
+        # Save in FSM.
+        await state.update_data(
+            donate_type=donate_type,
+            nickname=nickname,
+            donations=donations
+        )
+
+        donation_list = "\n".join([
+            f"- Card ID `{card_id}`: `{quantity}` unidades" for card_id, quantity in donations
+        ])
+        await message.reply(
+            f"⚠️ **Confirmação:** Você está prestes a doar os seguintes cards para `{nickname}`:\n"
+            f"{donation_list}\n\n"
+            "Clique em **Confirmar** para continuar ou ignore esta mensagem para cancelar.",
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [InlineKeyboardButton(text="✅ Confirmar", callback_data="donation_confirm")],
+                    [InlineKeyboardButton(text="❌ Cancelar", callback_data="donation_cancel")]
+                ]
+            )
+        )
+        await state.set_state(DoarCardsState.WAITING_CONFIRMATION)
 
 
-@router.callback_query(lambda call: call.data.startswith("confirm_card_all_"))
-async def confirm_card_all_donation(callback: types.CallbackQuery):
+@router.callback_query(Text("donation_confirm"), DoarCardsState.WAITING_CONFIRMATION)
+async def donation_confirm(callback: CallbackQuery, state: FSMContext) -> None:
     """
-    Processes confirmation for donating all cards.
-    Callback data format: "confirm_card_all_{nickname}"
+    Handler for the "Confirm" inline button.
+    We'll check which donation type the user selected ("all" or "specific"),
+    retrieve the relevant data from FSM, then apply the transaction.
     """
-    parts = callback.data.split("_")
-    if len(parts) < 4:
-        await callback.answer("Dados inválidos.", show_alert=True)
-        return
-    nickname = parts[3]
     donor_id = callback.from_user.id
+    data = await state.get_data()
+
+    donate_type = data.get("donate_type")
+    nickname = data.get("nickname")
 
     async with get_session() as session:
         donor_result = await session.execute(
             select(User).where(User.id == donor_id).options(joinedload(User.inventory))
         )
         donor = donor_result.unique().scalar_one_or_none()
-        recipient_result = await session.execute(select(User).where(User.nickname == nickname))
-        recipient = recipient_result.scalar_one_or_none()
-        if not donor or not recipient:
-            await callback.answer("Usuário não encontrado.", show_alert=True)
-            return
 
-        # Transfer all cards from donor to recipient.
-        for inv_item in donor.inventory:
-            card_id = inv_item.card_id
-            rec_inv_result = await session.execute(
-                select(Inventory).where(Inventory.user_id == recipient.id, Inventory.card_id == card_id)
-            )
-            recipient_inv = rec_inv_result.scalar_one_or_none()
-            if recipient_inv:
-                recipient_inv.quantity += inv_item.quantity
-            else:
-                new_inv = Inventory(user_id=recipient.id, card_id=card_id, quantity=inv_item.quantity)
-                session.add(new_inv)
-            inv_item.quantity = 0
-        await session.commit()
-
-    await callback.message.edit_text(
-        f"✅ Doação concluída! Você doou todos os seus cards para {nickname}.",
-        parse_mode=ParseMode.MARKDOWN
-    )
-    await callback.answer("Doação realizada com sucesso!", show_alert=True)
-
-
-@router.callback_query(lambda call: call.data.startswith("confirm_specific_"))
-async def confirm_specific_donation(callback: types.CallbackQuery):
-    """
-    Processes confirmation for donating specific cards.
-    Callback data format: "confirm_specific_{nickname}"
-    Donation details are retrieved from the temporary store.
-    """
-    parts = callback.data.split("_")
-    if len(parts) < 3:
-        await callback.answer("Dados inválidos.", show_alert=True)
-        return
-    nickname = parts[2]
-    donor_id = callback.from_user.id
-
-    if donor_id not in pending_specific_donations:
-        await callback.answer("Nenhuma doação pendente encontrada.", show_alert=True)
-        return
-
-    donations = pending_specific_donations.pop(donor_id)
-
-    async with get_session() as session:
-        donor_result = await session.execute(
-            select(User).where(User.id == donor_id).options(joinedload(User.inventory))
+        recipient_result = await session.execute(
+            select(User).where(User.nickname == nickname)
         )
-        donor = donor_result.unique().scalar_one_or_none()
-        recipient_result = await session.execute(select(User).where(User.nickname == nickname))
         recipient = recipient_result.scalar_one_or_none()
 
         if not donor or not recipient:
             await callback.answer("Usuário não encontrado.", show_alert=True)
             return
+        if donor.id == recipient.id:
+            await callback.answer("Você não pode doar cards para si mesmo.", show_alert=True)
+            return
 
-        for card_id, quantity in donations:
-            donor_inv = next((inv for inv in donor.inventory if inv.card_id == card_id), None)
-            if not donor_inv or donor_inv.quantity < quantity:
-                await callback.answer(f"Você não possui quantidade suficiente do card ID {card_id}.", show_alert=True)
-                continue
+        if donate_type == "all":
+            # Transfer all cards from donor to recipient.
+            for inv_item in donor.inventory:
+                if inv_item.quantity > 0:
+                    card_id = inv_item.card_id
+                    rec_inv_result = await session.execute(
+                        select(Inventory)
+                        .where(
+                            Inventory.user_id == recipient.id,
+                            Inventory.card_id == card_id
+                        )
+                    )
+                    recipient_inv = rec_inv_result.scalar_one_or_none()
+                    if recipient_inv:
+                        recipient_inv.quantity += inv_item.quantity
+                    else:
+                        new_inv = Inventory(
+                            user_id=recipient.id,
+                            card_id=card_id,
+                            quantity=inv_item.quantity
+                        )
+                        session.add(new_inv)
+                    inv_item.quantity = 0
+            await session.commit()
 
-            donor_inv.quantity -= quantity
-
-            rec_inv_result = await session.execute(
-                select(Inventory).where(Inventory.user_id == recipient.id, Inventory.card_id == card_id)
+            await callback.message.edit_text(
+                f"✅ Doação concluída! Você doou todos os seus cards para {nickname}.",
+                parse_mode=ParseMode.MARKDOWN
             )
-            recipient_inv = rec_inv_result.scalar_one_or_none()
-            if recipient_inv:
-                recipient_inv.quantity += quantity
-            else:
-                new_inv = Inventory(user_id=recipient.id, card_id=card_id, quantity=quantity)
-                session.add(new_inv)
-        await session.commit()
+            await callback.answer("Doação realizada com sucesso!", show_alert=True)
+            await state.clear()
 
-    await callback.message.edit_text(
-        f"✅ Doação concluída! Você doou os cards especificados para {nickname}.",
-        parse_mode=ParseMode.MARKDOWN
-    )
-    await callback.answer("Doação realizada com sucesso!", show_alert=True)
+        elif donate_type == "specific":
+            donations = data.get("donations", [])
+            for (card_id, quantity) in donations:
+                donor_inv = next((inv for inv in donor.inventory if inv.card_id == card_id), None)
+                if not donor_inv or donor_inv.quantity < quantity:
+                    await callback.answer(
+                        f"Você não possui quantidade suficiente do card ID {card_id}.",
+                        show_alert=True
+                    )
+                    continue
+
+                # Deduct from donor
+                donor_inv.quantity -= quantity
+
+                # Give to recipient
+                rec_inv_result = await session.execute(
+                    select(Inventory)
+                    .where(
+                        Inventory.user_id == recipient.id,
+                        Inventory.card_id == card_id
+                    )
+                )
+                recipient_inv = rec_inv_result.scalar_one_or_none()
+                if recipient_inv:
+                    recipient_inv.quantity += quantity
+                else:
+                    new_inv = Inventory(
+                        user_id=recipient.id,
+                        card_id=card_id,
+                        quantity=quantity
+                    )
+                    session.add(new_inv)
+            await session.commit()
+
+            await callback.message.edit_text(
+                f"✅ Doação concluída! Você doou os cards especificados para {nickname}.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            await callback.answer("Doação realizada com sucesso!", show_alert=True)
+            await state.clear()
+        else:
+            await callback.answer("Dados da doação ausentes.", show_alert=True)
 
 
-@router.callback_query(lambda call: call.data == "cancel_donation")
-async def cancel_donation(callback: types.CallbackQuery):
+@router.callback_query(Text("donation_cancel"), DoarCardsState.WAITING_CONFIRMATION)
+async def donation_cancel(callback: CallbackQuery, state: FSMContext) -> None:
     """
     Cancels any pending donation action.
     """
     await callback.message.edit_text("❌ Doação cancelada.", parse_mode=ParseMode.MARKDOWN)
     await callback.answer("Doação cancelada.", show_alert=True)
+    await state.clear()
