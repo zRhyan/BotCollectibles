@@ -52,6 +52,79 @@ def format_group_cards(cards: list[Card], user_inventory: dict[int, int], group_
         + f"\n\nNo seu inventário há {total_cards_user_owns} de {total_cards_in_group} cards deste grupo."
     )
 
+@router.message(Command(commands=["pokedex", "pd"]))
+async def pokedex_command(message: Message) -> None:
+    user_id = message.from_user.id
+    parts = message.text.split(maxsplit=1)
+    argument = parts[1].strip() if len(parts) > 1 else None
+
+    # Caso não tenha argumento, mostrar categorias
+    if not argument:
+        async with get_session() as session:
+            categories_result = await session.execute(
+                select(Category).options(selectinload(Category.groups))
+            )
+            categories = categories_result.scalars().all()
+
+        if not categories:
+            await message.answer("Nenhuma categoria disponível no momento.")
+            return
+
+        kb = build_categories_keyboard(categories)
+        await message.answer("📚 Escolha uma categoria para ver seus grupos:", reply_markup=kb)
+        return
+
+    # Caso tenha argumento: buscar grupo por ID ou nome
+    async with get_session() as session:
+        group = None
+        if argument.isdigit():
+            group_id = int(argument)
+            group_result = await session.execute(select(Group).where(Group.id == group_id))
+            group = group_result.scalar_one_or_none()
+        else:
+            group_result = await session.execute(select(Group).where(Group.name.ilike(f"%{argument}%")))
+            found = group_result.scalars().all()
+            if len(found) == 1:
+                group = found[0]
+            elif len(found) > 1:
+                await message.reply(
+                    "⚠️ **Erro:** Mais de um grupo encontrado com esse nome. Use o ID com `/pokedex ID`.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
+        if not group:
+            await message.reply("❌ Grupo não encontrado.", parse_mode=ParseMode.MARKDOWN)
+            return
+
+        cards_result = await session.execute(select(Card).where(Card.group_id == group.id))
+        cards_in_group = cards_result.scalars().all()
+
+        inv_result = await session.execute(
+            select(Inventory)
+            .join(Inventory.card)
+            .where(Inventory.user_id == user_id, Card.group_id == group.id)
+        )
+        user_inventory_list = inv_result.scalars().all()
+        user_inventory_map = {inv.card_id: inv.quantity for inv in user_inventory_list}
+
+        caption = format_group_cards(
+            cards=cards_in_group,
+            user_inventory=user_inventory_map,
+            group_id=group.id,
+            group_name=group.name,
+            user_id=user_id
+        )
+
+        if group.image_file_id:
+            await message.answer_photo(
+                photo=group.image_file_id,
+                caption=caption,
+                parse_mode=ParseMode.MARKDOWN
+            )
+        else:
+            await message.answer(caption, parse_mode=ParseMode.MARKDOWN)
+
 @router.callback_query(lambda c: c.data.startswith("pokedex_category:"))
 async def pokedex_category_callback(callback: CallbackQuery) -> None:
     data_parts = callback.data.split(":")
@@ -112,11 +185,6 @@ async def pokedex_group_callback(callback: CallbackQuery) -> None:
 
         cards_result = await session.execute(select(Card).where(Card.group_id == group_id))
         cards_in_group = cards_result.scalars().all()
-
-        if not cards_in_group:
-            await callback.message.answer("Não há cards cadastrados nesse grupo.")
-            await callback.answer()
-            return
 
         inv_result = await session.execute(
             select(Inventory)
