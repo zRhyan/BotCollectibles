@@ -28,6 +28,7 @@ from commands.venderc import router as venderc_router
 from commands.roubar import router as roubar_router
 from commands.pokedex import router as pokedex_router
 from commands.favpoke import router as favpoke_router
+from commands.ginasio import router as ginasio_router
 
 from admin_commands.addcarta import router as addcarta_router
 from admin_commands.rclicar import router as rclicar_router
@@ -89,6 +90,7 @@ dp.include_router(jornada_router)
 dp.include_router(pokedex_router)
 dp.include_router(mochila_router)
 dp.include_router(pokebanco_router)
+dp
 dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
 dp.include_router(favpoke_router)
@@ -136,6 +138,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="venderc", description="Vender cards para o Pokemart"),
         BotCommand(command="roubar", description="Trocar cartas com outro treinador"),
         BotCommand(command="favpoke", description="Definir seu card favorito"),
+        BotCommand(command="ginasio", description="Ver o ranking do ginásio"),
     ]
     await bot.set_my_commands(commands)
 
@@ -161,6 +164,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="venderc", description="Vender cards para o Pokemart"),
         BotCommand(command="roubar", description="Trocar cartas com outro treinador"),
         BotCommand(command="favpoke", description="Definir seu card favorito"),
+        BotCommand(command="ginasio", description="Ver o ranking do ginásio"),
     ]
 
     # Fetch the list of admin users from the database
