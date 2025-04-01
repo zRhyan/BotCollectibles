@@ -9,24 +9,16 @@ from database.models import Inventory, Card, Group, Category, User
 
 router = Router()
 
-MOCHILA_CALLBACK = "mochila_page_{page}"
+# Novo padrão para callback: mochila_page_{page}_user_{user_id}
+MOCHILA_CALLBACK_PREFIX = "mochila_page"
 
-# =============================
-# Comando /mochila (com suporte a argumentos e grupos)
-# =============================
 @router.message(Command(commands=["mochila"], ignore_case=True, ignore_mention=True))
 async def mochila_command(message: Message, command: CommandObject):
-    """
-    Exibe a mochila do usuário. Se for passado um argumento (username ou nickname),
-    busca a mochila de outro usuário.
-    """
     args = (command.args or "").strip()
 
-    # Busca alvo: outro usuário (se argumento), ou o próprio remetente
     async with get_session() as session:
         if args:
             username_lookup = args.lstrip("@").lower()
-
             stmt = select(User).where(
                 (User.username.ilike(username_lookup)) |
                 (User.nickname.ilike(f"%{username_lookup}%"))
@@ -49,7 +41,6 @@ async def mochila_command(message: Message, command: CommandObject):
                 )
                 return
 
-        # Busca inventário com quantity >= 1
         result = await session.execute(
             select(Inventory, Card, Group, Category)
             .join(Card, Inventory.card_id == Card.id)
@@ -73,19 +64,18 @@ async def mochila_command(message: Message, command: CommandObject):
         message,
         inventory,
         page=1,
+        user_id=target_user.id,
         nickname=target_user.nickname or target_user.username or "Usuário",
         fav_card_id=target_user.fav_card_id,
         fav_emoji=target_user.fav_emoji
     )
 
 
-# =============================
-# Página da mochila
-# =============================
 async def send_mochila_page(
     message_or_callback: Message | CallbackQuery,
     inventory: list,
     page: int,
+    user_id: int,
     nickname: str,
     fav_card_id: int | None = None,
     fav_emoji: str | None = None
@@ -113,9 +103,15 @@ async def send_mochila_page(
 
     keyboard = InlineKeyboardBuilder()
     if page > 1:
-        keyboard.button(text="⬅️ Anterior", callback_data=MOCHILA_CALLBACK.format(page=page - 1))
+        keyboard.button(
+            text="⬅️ Anterior",
+            callback_data=f"{MOCHILA_CALLBACK_PREFIX}_{page - 1}_user_{user_id}"
+        )
     if page < total_pages:
-        keyboard.button(text="Próximo ➡️", callback_data=MOCHILA_CALLBACK.format(page=page + 1))
+        keyboard.button(
+            text="Próximo ➡️",
+            callback_data=f"{MOCHILA_CALLBACK_PREFIX}_{page + 1}_user_{user_id}"
+        )
     keyboard.adjust(2)
 
     if isinstance(message_or_callback, CallbackQuery):
@@ -150,21 +146,24 @@ async def send_mochila_page(
             )
 
 
-# =============================
-# Paginação
-# =============================
 @router.callback_query(F.data.startswith("mochila_page_"))
 async def mochila_pagination_callback(callback: CallbackQuery):
-    page = int(callback.data.split("_")[-1])
-    user_id = callback.from_user.id
+    """
+    Exibe a página da mochila do usuário original (não de quem clicou).
+    """
+    try:
+        # Extrai página e user_id do callback_data
+        parts = callback.data.split("_")
+        page = int(parts[2])
+        user_id = int(parts[4])
+    except Exception:
+        await callback.answer("❌ Erro ao processar a navegação da mochila.", show_alert=True)
+        return
 
     async with get_session() as session:
         user = await session.get(User, user_id)
         if not user:
-            await callback.message.edit_text(
-                "❌ Você ainda não se registrou.\nUse /jornada para iniciar.",
-                parse_mode=ParseMode.MARKDOWN
-            )
+            await callback.answer("❌ Usuário original não encontrado.", show_alert=True)
             return
 
         result = await session.execute(
@@ -181,6 +180,7 @@ async def mochila_pagination_callback(callback: CallbackQuery):
         callback,
         inventory,
         page,
+        user_id=user.id,
         nickname=user.nickname or user.username or "Usuário",
         fav_card_id=user.fav_card_id,
         fav_emoji=user.fav_emoji
