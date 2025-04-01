@@ -1,6 +1,28 @@
+"""
+Roubar Command (Aiogram v3)
+===========================
+Este comando /roubar permite que um usuário (chamado aqui de “solicitante”) peça determinadas cartas que outro usuário
+(possível “alvo”) possui, oferecendo em troca outras cartas. Somente o “alvo” (usuário mencionado) poderá confirmar ou recusar.
+
+Sintaxe de uso (exemplo):
+    /roubar @usuario_destino  20 x2 25 x1 | 10 x3 42 x2
+
+Significa:
+- O solicitante quer "pegar" do usuário destino as cartas:
+    ID=20 (2 unidades), ID=25 (1 unidade)
+- E está oferecendo em troca suas próprias cartas:
+    ID=10 (3 unidades), ID=42 (2 unidades)
+    
+O bot então envia uma mensagem para o grupo, com dois botões inline: "Aceitar" e "Recusar".
+Apenas o usuário alvo (@usuario_destino) pode interagir com esses botões.
+Quando clica em "Aceitar", o bot verifica se ambos de fato possuem as quantidades necessárias,
+e caso sim, efetua a troca e envia uma notificação de sucesso.
+"""
+
+import asyncio
 from aiogram import Router, types
-from aiogram.enums import ParseMode
 from aiogram.filters import Command
+from aiogram.enums import ParseMode
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup
@@ -12,141 +34,155 @@ from database.session import get_session
 
 router = Router()
 
-class RoubarState(StatesGroup):
-    """
-    States for the /roubar command.
-    """
-    WAITING_CONFIRMATION = State()
+# ---------------------------------------------------------
+# 1. Definição de estado para a troca via FSM
+# ---------------------------------------------------------
+class RoubarStates(StatesGroup):
+    WAITING_TARGET_RESPONSE = State()
 
 
+# ---------------------------------------------------------
+# 2. Handler principal: /roubar
+# ---------------------------------------------------------
 @router.message(Command(commands=["roubar"]))
 async def roubar_command(message: types.Message, state: FSMContext) -> None:
     """
-    Handles the /roubar command for exchanging ("trading") cards between two users.
+    Inicia o fluxo de troca ("roubar").
 
-    Expected format:
-        /roubar <ID do outro usuário> id1 xqty1, id2 xqty2 X id3 xqty3, id4 xqty4
-    Or if the user is replying to a target user's message:
-        /roubar id1 xqty1, id2 xqty2 X id3 xqty3, id4 xqty4  (and we gather the user from the replied message)
+    Sintaxe esperada (exemplo):
+        /roubar @usuario_destino  20 x2 25 x1 | 10 x3 42 x2
+
+    - O trecho antes do '|' representa as cartas que o solicitante quer pegar do alvo.
+    - O trecho depois do '|' representa as cartas que o solicitante está oferecendo ao alvo.
+    - Se o usuário mencionar o alvo respondendo a mensagem dele no grupo, isso também é válido
+      (porém, iremos priorizar o @username se fornecido explicitamente).
+
+    Observação: Ao final, apenas o usuário alvo poderá aceitar ou recusar a proposta.
     """
-    donor_id = message.from_user.id
-
-    # Attempt to parse the text for the user ID argument
-    # We'll split on whitespace once to see if the first token is numeric
+    requester_id = message.from_user.id
     text_parts = message.text.strip().split(maxsplit=1)
 
+    # Verifica se há algo além de "/roubar"
     if len(text_parts) < 2:
         await message.reply(
-            "❗ **Erro:** Use o formato `/roubar <userid> <suas cartas> X <cartas alvo>` ou responda a mensagem do usuário alvo.",
+            "❗ **Uso incorreto:**\n"
+            "Ex: `/roubar @usuario_destino 20 x2 25 x1 | 10 x3 42 x1`",
             parse_mode=ParseMode.MARKDOWN
         )
         return
 
-    # If the user typed: /roubar <something>
-    possible_user_arg = text_parts[1].split()[0]  # first token after /roubar
-    remainder = None
-    target_id = None
+    # Primeiro token após /roubar (possível @username, ou parte de cartas)
+    remainder = text_parts[1].strip().split()
+    if not remainder:
+        await message.reply(
+            "❗ **Erro:** Argumentos insuficientes.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
 
-    if possible_user_arg.isdigit():
-        # The user provided a numeric ID directly
-        target_id = int(possible_user_arg)
-        # The rest is after removing that token
-        remainder_tokens = text_parts[1].split(maxsplit=1)
-        if len(remainder_tokens) < 2:
-            await message.reply(
-                "❗ **Erro:** Faltam os dados de cartas. Exemplo: `/roubar 123 7 x2, 9 x1 X 10 x3, 11 x4`",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-        remainder = remainder_tokens[1]
+    # Pode ser que o primeiro token seja "@username" ou "apenas" parte do card list
+    possible_username = remainder[0]
+    target_mention = None
+    # Verifica se começa com "@"
+    if possible_username.startswith("@"):
+        target_mention = possible_username
+        # Remove esse token e deixa o resto no 'all_cards_part'
+        remainder = remainder[1:]
     else:
-        # No numeric user ID => might rely on reply_to_message or we assume the entire text is the card data
-        remainder = text_parts[1]
-
-    # If still no target_id, we check if user replied to a message
-    if not target_id:
+        # Tentar extrair do reply se existir
         if message.reply_to_message and message.reply_to_message.from_user:
-            target_id = message.reply_to_message.from_user.id
+            target_mention = "@" + (message.reply_to_message.from_user.username or "")
         else:
+            # Falta menção
             await message.reply(
-                "❗ **Erro:** Você deve informar o ID do usuário ou responder à mensagem do alvo.",
+                "❗ **Erro:** Forneça o @username do alvo ou responda a mensagem dele no grupo.\n"
+                "Ex: `/roubar @usuario_destino 20 x2 | 10 x1`",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
 
-    # Now, parse remainder for the cards => must contain an 'X'
-    if "X" not in remainder:
+    # Se remainder vazio => erro
+    if not remainder:
         await message.reply(
-            "❗ **Erro:** Formato inválido. Use algo como: `id1 xqty1, id2 xqty2 X id3 xqty3, id4 xqty4`.",
+            "❗ **Erro:** Faltam as cartas.\n"
+            "Use `/roubar @usuario 10 x2 | 42 x1` etc.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
 
-    text_cards_parts = remainder.split("X")
-    if len(text_cards_parts) != 2:
+    all_cards_str = " ".join(remainder).strip()
+
+    # Procuramos o caractere '|'
+    if "|" not in all_cards_str:
         await message.reply(
-            "❗ **Erro:** Formato inválido. Use o formato: `/roubar <userid> id1 xqty1, id2 xqty2 X id3 xqty3, id4 xqty4`.\n" 
-            "Ou responda a mensagem do usuário alvo e use: `/roubar id1 xqty1, id2 xqty2 X id3 xqty3, id4 xqty4`.",
+            "❗ **Erro:** Formato inválido. Falta o `|` separando cartas que você deseja e as que oferece.\n"
+            "Exemplo: `/roubar @user 20 x2 | 25 x1`",
             parse_mode=ParseMode.MARKDOWN
         )
         return
 
-    offered_str = text_cards_parts[0].strip()
-    requested_str = text_cards_parts[1].strip()
+    requested_str, offered_str = all_cards_str.split("|", maxsplit=1)
+    requested_str = requested_str.strip()
+    offered_str = offered_str.strip()
 
-    # Parse the card data
+    if not requested_str or not offered_str:
+        await message.reply(
+            "❗ **Erro:** Formato inválido. As duas partes (antes e depois do `|`) devem conter cartas.\n"
+            "Exemplo: `/roubar @user 20 x2 21 x1 | 25 x2`",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Fazemos parse do requested e do offered
     try:
-        offered_cards = parse_card_data(offered_str)
         requested_cards = parse_card_data(requested_str)
-    except ValueError as e:
-        await message.reply(f"❗ **Erro:** {e}", parse_mode=ParseMode.MARKDOWN)
+        offered_cards = parse_card_data(offered_str)
+    except ValueError as ve:
+        await message.reply(
+            f"❗ **Erro de Formato:** {ve}",
+            parse_mode=ParseMode.MARKDOWN
+        )
         return
 
-    # We'll verify that donor has enough for the offered cards
-    # We'll also check if the target user has enough for the requested cards.
-    # Actually, let's do that after the user confirms it. Or we can do partial check now.
-
+    # 3. Buscar o user alvo do DB via mention (ou fallback se não achar)
+    #    Se o mention estiver vazio, poderia ser no reply ou nickname no DB etc.
     async with get_session() as session:
-        donor = await session.get(User, donor_id)
-        recipient = await session.get(User, target_id)
-
-        if not donor or not recipient:
+        target_user = await find_user_by_mention(session, target_mention)
+        if not target_user:
             await message.reply(
-                "❌ **Erro:** Um dos usuários não está registrado no sistema.",
+                f"❌ **Erro:** Não encontrei nenhum usuário com username ou nickname `{target_mention}`.",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
 
-    # Store the trade info in FSM data
+    target_id = target_user.id
+
+    # Armazena na FSM
     await state.update_data(
-        donor_id=donor_id,
-        recipient_id=target_id,
-        offered=offered_cards,
-        requested=requested_cards
+        requester_id=requester_id,
+        target_id=target_id,
+        requested_cards=requested_cards,  # que o requester quer "pegar"
+        offered_cards=offered_cards       # que o requester oferece em troca
     )
 
-    offered_text = format_card_list(offered_cards)
+    # Monta texto de confirmação
     requested_text = format_card_list(requested_cards)
-
-    # We'll direct the user (the target) to click accept or reject.
-    # But we actually need to send them a message they can see. Possibly we do a normal message from the donor.
-
+    offered_text = format_card_list(offered_cards)
     confirm_text = (
-        f"⚠️ **Confirmação de Troca**\n\n"
-        f"🔄 **Oferta de {message.from_user.username or donor_id}:**\n" + offered_text + "\n\n"
-        f"🎯 **Solicitação:**\n" + requested_text + "\n\n"
+        f"⚠️ **Proposta de Troca**\n\n"
+        f"👤 Solicitante: {message.from_user.username or requester_id}\n"
+        f"🎯 Alvo: {target_mention}\n\n"
+        f"**Cartas que o solicitante deseja de você:**\n{requested_text}\n\n"
+        f"**Cartas oferecidas em troca:**\n{offered_text}\n\n"
         "Clique em **Aceitar** para confirmar ou **Recusar** para cancelar."
     )
 
-    # The user might want to see it in the same chat
-    # If the target user is in this group, they can see it.
-    # We'll just do a normal reply in the same chat.
-
+    # Inline buttons
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Aceitar", callback_data="trade_accept"),
-                InlineKeyboardButton(text="❌ Recusar", callback_data="trade_reject")
+                InlineKeyboardButton(text="✅ Aceitar", callback_data="roubar_accept"),
+                InlineKeyboardButton(text="❌ Recusar", callback_data="roubar_reject")
             ]
         ]
     )
@@ -157,95 +193,126 @@ async def roubar_command(message: types.Message, state: FSMContext) -> None:
         reply_markup=kb
     )
 
-    await state.set_state(RoubarState.WAITING_CONFIRMATION)
+    await state.set_state(RoubarStates.WAITING_TARGET_RESPONSE)
 
+    # Auto-clean: limpa o estado após 3 minutos (180s)
+    async def auto_cleanup():
+        await asyncio.sleep(180)
+        state_data = await state.get_data()
+        # Checa se o estado ainda é o esperado antes de limpar
+        current_state = await state.get_state()
+        if current_state == RoubarStates.WAITING_TARGET_RESPONSE:
+            await state.clear()
+            try:
+                await message.reply(
+                    "⌛ A proposta de troca expirou após 3 minutos sem resposta.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception:
+                pass  # o chat pode ter sido removido ou a mensagem não ser mais acessível
 
-@router.callback_query(lambda c: c.data == "trade_accept", RoubarState.WAITING_CONFIRMATION)
-async def accept_trade(callback: CallbackQuery, state: FSMContext) -> None:
+    asyncio.create_task(auto_cleanup())
+
+# ---------------------------------------------------------
+# 4. Handler para aceitar a troca
+# ---------------------------------------------------------
+@router.callback_query(lambda c: c.data == "roubar_accept", RoubarStates.WAITING_TARGET_RESPONSE)
+async def roubar_accept_callback(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
-    donor_id = data.get("donor_id")
-    recipient_id = data.get("recipient_id")
-    offered = data.get("offered", [])
-    requested = data.get("requested", [])
+    requester_id = data.get("requester_id")
+    target_id = data.get("target_id")
+    requested_cards = data.get("requested_cards", [])
+    offered_cards = data.get("offered_cards", [])
 
-    # The user who clicked accept must be the recipient
-    if callback.from_user.id != recipient_id:
-        await callback.answer("Você não é o usuário alvo dessa troca.", show_alert=True)
+    # Somente o alvo pode aceitar
+    if callback.from_user.id != target_id:
+        await callback.answer("Você não é o alvo desta troca.", show_alert=True)
         return
 
-    # Now we do the checks and transfer
+    # Verificar posse e realizar troca
     async with get_session() as session:
-        # Donor must have all offered cards
-        # Recipient must have all requested cards
-        # We'll assume they're valid. If we want to check, do it now.
-        donor_res = await session.execute(
-            select(User).where(User.id == donor_id).options(joinedload(User.inventory))
+        # Carregar user e inventário com joinedload
+        requester_res = await session.execute(
+            select(User).where(User.id == requester_id).options(joinedload(User.inventory))
         )
-        donor = donor_res.unique().scalar_one_or_none()
+        requester = requester_res.unique().scalar_one_or_none()
 
-        recipient_res = await session.execute(
-            select(User).where(User.id == recipient_id).options(joinedload(User.inventory))
+        target_res = await session.execute(
+            select(User).where(User.id == target_id).options(joinedload(User.inventory))
         )
-        recipient = recipient_res.unique().scalar_one_or_none()
+        target_user = target_res.unique().scalar_one_or_none()
 
-        if not donor or not recipient:
-            await callback.answer("Um dos usuários não está registrado.", show_alert=True)
+        if not requester or not target_user:
+            await callback.answer("Erro: algum usuário não está registrado.", show_alert=True)
             return
 
-        # Check donor's offered cards
-        for card_id, qty in offered:
-            donor_inv = next((inv for inv in donor.inventory if inv.card_id == card_id), None)
-            if not donor_inv or donor_inv.quantity < qty:
+        # Verifica se o alvo (target) tem as cartas que o solicitante está pedindo
+        for (card_id, qty) in requested_cards:
+            target_inv = next((inv for inv in target_user.inventory if inv.card_id == card_id), None)
+            if not target_inv or target_inv.quantity < qty:
                 await callback.answer(
-                    f"O doador não possui {qty}x do card ID {card_id}.", show_alert=True
+                    f"Você não possui {qty}x do card ID {card_id}.",
+                    show_alert=True
                 )
                 return
 
-        # Check recipient's requested cards
-        for card_id, qty in requested:
-            recip_inv = next((inv for inv in recipient.inventory if inv.card_id == card_id), None)
-            if not recip_inv or recip_inv.quantity < qty:
+        # Verifica se o solicitante (requester) tem as cartas oferecidas
+        for (card_id, qty) in offered_cards:
+            req_inv = next((inv for inv in requester.inventory if inv.card_id == card_id), None)
+            if not req_inv or req_inv.quantity < qty:
                 await callback.answer(
-                    f"Você não possui {qty}x do card ID {card_id}.", show_alert=True
+                    f"O solicitante não possui {qty}x do card ID {card_id}.",
+                    show_alert=True
                 )
                 return
 
-        # If all good, do the actual trade
-        # Transfer from donor -> recipient
-        for card_id, qty in offered:
-            donor_inv = next((inv for inv in donor.inventory if inv.card_id == card_id), None)
-            donor_inv.quantity -= qty
-            recip_inv = next((inv for inv in recipient.inventory if inv.card_id == card_id), None)
-            if recip_inv:
-                recip_inv.quantity += qty
+        # Tudo ok, realiza a troca
+        #  - target -> requester (requested_cards)
+        for (card_id, qty) in requested_cards:
+            target_inv = next((inv for inv in target_user.inventory if inv.card_id == card_id), None)
+            if target_inv:  # safe
+                target_inv.quantity -= qty
+            # Adicionar ao requester
+            req_inv = next((inv for inv in requester.inventory if inv.card_id == card_id), None)
+            if req_inv:
+                req_inv.quantity += qty
             else:
-                session.add(Inventory(user_id=recipient_id, card_id=card_id, quantity=qty))
+                session.add(Inventory(user_id=requester_id, card_id=card_id, quantity=qty))
 
-        # Transfer from recipient -> donor
-        for card_id, qty in requested:
-            recip_inv = next((inv for inv in recipient.inventory if inv.card_id == card_id), None)
-            recip_inv.quantity -= qty
-            donor_inv = next((inv for inv in donor.inventory if inv.card_id == card_id), None)
-            if donor_inv:
-                donor_inv.quantity += qty
+        #  - requester -> target (offered_cards)
+        for (card_id, qty) in offered_cards:
+            req_inv = next((inv for inv in requester.inventory if inv.card_id == card_id), None)
+            if req_inv:
+                req_inv.quantity -= qty
+            # Adicionar ao target
+            tgt_inv = next((inv for inv in target_user.inventory if inv.card_id == card_id), None)
+            if tgt_inv:
+                tgt_inv.quantity += qty
             else:
-                session.add(Inventory(user_id=donor_id, card_id=card_id, quantity=qty))
+                session.add(Inventory(user_id=target_id, card_id=card_id, quantity=qty))
 
         await session.commit()
 
-    await callback.message.edit_text("✅ **Troca concluída com sucesso!**", parse_mode=ParseMode.MARKDOWN)
+    # Se chegou até aqui, troca concluída
+    await callback.message.edit_text(
+        "✅ **Troca concluída com sucesso!**",
+        parse_mode=ParseMode.MARKDOWN
+    )
     await callback.answer("Troca realizada com sucesso!", show_alert=True)
     await state.clear()
 
 
-@router.callback_query(lambda c: c.data == "trade_reject", RoubarState.WAITING_CONFIRMATION)
-async def reject_trade(callback: CallbackQuery, state: FSMContext) -> None:
+# ---------------------------------------------------------
+# 5. Handler para recusar a troca
+# ---------------------------------------------------------
+@router.callback_query(lambda c: c.data == "roubar_reject", RoubarStates.WAITING_TARGET_RESPONSE)
+async def roubar_reject_callback(callback: CallbackQuery, state: FSMContext) -> None:
     data = await state.get_data()
-    recipient_id = data.get("recipient_id")
+    target_id = data.get("target_id")
 
-    # Only the recipient can reject
-    if callback.from_user.id != recipient_id:
-        await callback.answer("Você não é o usuário alvo dessa troca.", show_alert=True)
+    # Somente o alvo pode recusar
+    if callback.from_user.id != target_id:
+        await callback.answer("Você não é o alvo desta troca.", show_alert=True)
         return
 
     await callback.message.edit_text("❌ **Troca recusada.**", parse_mode=ParseMode.MARKDOWN)
@@ -253,31 +320,73 @@ async def reject_trade(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
 
 
-def parse_card_data(card_data: str) -> list[tuple[int, int]]:
+# ---------------------------------------------------------
+# 6. Funções auxiliares
+# ---------------------------------------------------------
+def parse_card_data(card_block: str) -> list[tuple[int, int]]:
     """
-    Parses card data in the format "id1 xqty1, id2 xqty2".
-    Returns a list of tuples [(id1, qty1), (id2, qty2)].
+    Recebe algo como "20 x2 25 x1" e devolve [(20,2), (25,1)].
+    Utiliza espaço para separar blocos e "x" para separar ID e quantidade.
     """
+    tokens = card_block.split()
+    if not tokens or len(tokens) % 2 != 0:
+        raise ValueError(
+            f"Formato inválido para blocos de cartas: '{card_block}'. "
+            "Exemplo correto: '20 x2 25 x1'."
+        )
+
     cards = []
-    for item in card_data.split(","):
-        item = item.strip()
-        if not item:
-            continue
+    for i in range(0, len(tokens), 2):
+        card_str = tokens[i]
+        qty_str = tokens[i+1]
+
+        # Esperamos "x2" no qty_str => remover 'x'
+        if not qty_str.startswith("x"):
+            raise ValueError(
+                f"Formato inválido em '{tokens[i]} {tokens[i+1]}'. Esperado algo como '20 x2'."
+            )
         try:
-            card_id_str, qty_str = item.split("x")
-            card_id = int(card_id_str)
-            qty = int(qty_str)
+            card_id = int(card_str)
+            qty = int(qty_str[1:])  # remove o 'x'
             if qty <= 0:
-                raise ValueError(f"Quantidade inválida em `{item}`.")
+                raise ValueError(f"Quantidade inválida em '{tokens[i]} {tokens[i+1]}' (não pode ser <= 0).")
             cards.append((card_id, qty))
         except ValueError:
-            raise ValueError(f"Formato inválido para `{item}`. Use `ID xQuantidade`.")
+            raise ValueError(f"Erro ao interpretar '{tokens[i]} {tokens[i+1]}'. Exemplo correto: '20 x2'.")
+
     return cards
 
 
-def format_card_list(cards: list[tuple[int,int]]) -> str:
+def format_card_list(cards: list[tuple[int, int]]) -> str:
     """
-    Formats a list of cards into a readable string.
+    Retorna string para exibir, ex:
+    - Card ID `20`: `2` unidades
+    - Card ID `25`: `1` unidades
     """
-    lines = [f"- Card ID `{cid}`: `{q}` unidades" for cid, q in cards]
+    lines = []
+    for cid, qty in cards:
+        lines.append(f"- Card ID `{cid}`: `{qty}` unidades")
     return "\n".join(lines)
+
+
+async def find_user_by_mention(session, mention: str) -> User | None:
+    """
+    Tenta encontrar um usuário no BD usando:
+      1) mention sem '@' => se for nickname
+      2) mention com '@' => se for username
+    No seu BD, verifique se faz sentido:
+      - Se username armazena no User.username
+      - Se nickname armazena no User.nickname
+    """
+    mention_clean = mention.lstrip("@").lower()  # remove '@' e converte pra minúsculo
+    # Tenta buscar por username
+    user_q = await session.execute(
+        select(User)
+        .where(
+            (User.username == mention_clean)
+            | (User.nickname.ilike(f"%{mention_clean}%"))
+        )
+    )
+    user_db = user_q.scalar_one_or_none()
+    return user_db
+
