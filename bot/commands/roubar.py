@@ -1,5 +1,4 @@
 import asyncio
-import time
 from aiogram import Router, types, F
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
@@ -17,6 +16,9 @@ from database.models import User, Inventory, Card
 from database.session import get_session
 
 router = Router()
+
+# Armazenamento temporário para trocas pendentes
+pending_trades = {}
 
 # ===========================
 # Definição de estado via FSM
@@ -136,23 +138,6 @@ async def roubar_command(message: types.Message, state: FSMContext) -> None:
             return
         target_id = target_user.id
 
-    # Gerar um ID único para esta transação
-    transaction_id = f"{requester_id}:{target_id}:{int(time.time())}"
-
-    # Salvamos na storage global para ser acessível por ambos usuários
-    # Essencial: Usamos uma chave global independente do usuário
-    await state.storage.set_data(
-        bot=state.bot, 
-        key=f"trade:{transaction_id}",
-        data={
-            "requester_id": requester_id,
-            "target_id": target_id,
-            "requested_cards": requested_cards,
-            "offered_cards": offered_cards,
-            "created_at": time.time()
-        }
-    )
-
     # Monta texto de solicitação, incluindo NOME e RARIDADE
     request_text = await build_trade_text(requested_cards, offered_cards)
 
@@ -164,9 +149,9 @@ async def roubar_command(message: types.Message, state: FSMContext) -> None:
         "Clique em **Aceitar** para confirmar ou **Recusar** para cancelar."
     )
 
-    # O transaction_id é usado no callback_data para rastrear esta troca específica
-    accept_callback = f"roubar_accept:{transaction_id}"
-    reject_callback = f"roubar_reject:{transaction_id}"
+    # Usamos callback_data com message_id
+    accept_callback = f"roubar_accept:{message.message_id}"
+    reject_callback = f"roubar_reject:{message.message_id}"
 
     kb = InlineKeyboardMarkup(
         inline_keyboard=[
@@ -177,22 +162,27 @@ async def roubar_command(message: types.Message, state: FSMContext) -> None:
         ]
     )
 
-    sent_msg = await message.reply(
+    sent_message = await message.reply(
         confirm_text,
         parse_mode=ParseMode.MARKDOWN,
         reply_markup=kb
     )
 
+    # Armazena os dados da troca usando o message_id como chave
+    pending_trades[sent_message.message_id] = {
+        "requester_id": requester_id,
+        "target_id": target_id,
+        "requested_cards": requested_cards,
+        "offered_cards": offered_cards
+    }
+
     # Auto-limpeza após 3 minutos
     async def auto_cleanup():
         await asyncio.sleep(180)
-        # Verificar se a transação ainda existe e não foi processada
-        trade_data = await state.storage.get_data(bot=state.bot, key=f"trade:{transaction_id}")
-        if trade_data:
-            # Limpar dados da transação expirada
-            await state.storage.set_data(bot=state.bot, key=f"trade:{transaction_id}", data={})
+        if sent_message.message_id in pending_trades:
+            del pending_trades[sent_message.message_id]
             try:
-                await sent_msg.edit_text(
+                await message.reply(
                     "⌛ A proposta de troca expirou após 3 minutos sem resposta.",
                     parse_mode=ParseMode.MARKDOWN
                 )
@@ -209,34 +199,39 @@ async def roubar_command(message: types.Message, state: FSMContext) -> None:
 async def roubar_accept_callback(callback: CallbackQuery, state: FSMContext) -> None:
     """
     Captura o clique em 'Aceitar' e realiza a troca.
-    Ex: callback_data == "roubar_accept:{transaction_id}"
+    Ex: callback_data == "roubar_accept:{message_id}"
     """
-    # Extrair o ID de transação
-    transaction_id = callback.data.split(":", 1)[1]
-    
-    # Recuperar dados da transação global
-    trade_data = await state.storage.get_data(
-        bot=state.bot,
-        key=f"trade:{transaction_id}"
-    )
-    
-    if not trade_data:
-        await callback.answer("Esta transação expirou ou é inválida.", show_alert=True)
+
+    data_parts = callback.data.split(":")
+    if len(data_parts) != 2:
+        await callback.answer("Dados de troca inválidos.", show_alert=True)
         return
-    
-    req_id = trade_data.get("requester_id")
-    tgt_id = trade_data.get("target_id")
-    requested_cards = trade_data.get("requested_cards", [])
-    offered_cards = trade_data.get("offered_cards", [])
-    
-    # Check se callback.from_user.id == tgt_id
+
+    _, str_message_id = data_parts
+    try:
+        message_id = int(str_message_id)
+    except ValueError:
+        await callback.answer("Erro ao interpretar ID da mensagem.", show_alert=True)
+        return
+
+    # Recupera os dados da troca
+    trade_data = pending_trades.get(message_id)
+    if not trade_data:
+        await callback.answer("Troca expirada ou inválida.", show_alert=True)
+        return
+
+    req_id = trade_data["requester_id"]
+    tgt_id = trade_data["target_id"]
+    requested_cards = trade_data["requested_cards"]
+    offered_cards = trade_data["offered_cards"]
+
+    # Verifica se o usuário é o alvo
     if callback.from_user.id != tgt_id:
         await callback.answer("Você não pode interagir com essa troca.", show_alert=True)
         return
 
     # Lógica de verificação e troca
     async with get_session() as session:
-        # Carrega info do solicitante e do alvo
         req_query = await session.execute(
             select(User).where(User.id == req_id).options(joinedload(User.inventory))
         )
@@ -251,7 +246,6 @@ async def roubar_accept_callback(callback: CallbackQuery, state: FSMContext) -> 
             await callback.answer("Usuário não encontrado ou não registrado.", show_alert=True)
             return
 
-        # Verifica se o alvo (target_user) tem as cartas => requested_cards
         for (card_id, qty) in requested_cards:
             t_item = next((inv for inv in target_user.inventory if inv.card_id == card_id), None)
             if not t_item or t_item.quantity < qty:
@@ -261,7 +255,6 @@ async def roubar_accept_callback(callback: CallbackQuery, state: FSMContext) -> 
                 )
                 return
 
-        # Verifica se o solicitante tem => offered_cards
         for (card_id, qty) in offered_cards:
             r_item = next((inv for inv in requester.inventory if inv.card_id == card_id), None)
             if not r_item or r_item.quantity < qty:
@@ -271,8 +264,6 @@ async def roubar_accept_callback(callback: CallbackQuery, state: FSMContext) -> 
                 )
                 return
 
-        # Ok, efetua a troca
-        # target->requester
         for (card_id, qty) in requested_cards:
             t_item = next(inv for inv in target_user.inventory if inv.card_id == card_id)
             t_item.quantity -= qty
@@ -282,7 +273,6 @@ async def roubar_accept_callback(callback: CallbackQuery, state: FSMContext) -> 
             else:
                 session.add(Inventory(user_id=req_id, card_id=card_id, quantity=qty))
 
-        # requester->target
         for (card_id, qty) in offered_cards:
             r_item = next(inv for inv in requester.inventory if inv.card_id == card_id)
             r_item.quantity -= qty
@@ -294,12 +284,9 @@ async def roubar_accept_callback(callback: CallbackQuery, state: FSMContext) -> 
 
         await session.commit()
 
-    # Limpar dados de transação
-    await state.storage.set_data(bot=state.bot, key=f"trade:{transaction_id}", data={})
-    
-    # Edição de texto no chat
     await callback.message.edit_text("✅ **Troca concluída com sucesso!**", parse_mode=ParseMode.MARKDOWN)
     await callback.answer("Troca finalizada!", show_alert=True)
+    del pending_trades[message_id]  # Limpa a troca
 
 
 # ===============================
@@ -309,32 +296,35 @@ async def roubar_accept_callback(callback: CallbackQuery, state: FSMContext) -> 
 async def roubar_reject_callback(callback: CallbackQuery, state: FSMContext) -> None:
     """
     Captura o clique em 'Recusar'.
-    Ex: callback_data == "roubar_reject:{transaction_id}"
+    Ex: callback_data == "roubar_reject:{message_id}"
     """
-    # Extrair o ID de transação
-    transaction_id = callback.data.split(":", 1)[1]
-    
-    # Recuperar dados da transação global
-    trade_data = await state.storage.get_data(
-        bot=state.bot,
-        key=f"trade:{transaction_id}"
-    )
-    
-    if not trade_data:
-        await callback.answer("Esta transação expirou ou é inválida.", show_alert=True)
+
+    data_parts = callback.data.split(":")
+    if len(data_parts) != 2:
+        await callback.answer("Dados de troca inválidos.", show_alert=True)
         return
-    
-    tgt_id = trade_data.get("target_id")
-    
+
+    _, str_message_id = data_parts
+    try:
+        message_id = int(str_message_id)
+    except ValueError:
+        await callback.answer("Erro ao interpretar ID da mensagem.", show_alert=True)
+        return
+
+    trade_data = pending_trades.get(message_id)
+    if not trade_data:
+        await callback.answer("Troca expirada ou inválida.", show_alert=True)
+        return
+
+    tgt_id = trade_data["target_id"]
+
     if callback.from_user.id != tgt_id:
         await callback.answer("Você não pode interagir com essa troca.", show_alert=True)
         return
 
-    # Limpar dados de transação
-    await state.storage.set_data(bot=state.bot, key=f"trade:{transaction_id}", data={})
-    
     await callback.message.edit_text("❌ **Troca recusada.**", parse_mode=ParseMode.MARKDOWN)
     await callback.answer("Troca recusada.", show_alert=True)
+    del pending_trades[message_id]  # Limpa a troca
 
 
 # =========================================================
