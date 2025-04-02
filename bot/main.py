@@ -150,6 +150,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="imgpd", description="(Admin) Adicionar imagem a um grupo"),
         BotCommand(command="rclicar", description="(Admin) Distribuir pokebolas"),
         BotCommand(command="rcoins", description="(Admin) Distribuir pokecoins"),
+        BotCommand(command="fileid", description="(Admin) Obter file_id de uma imagem"),
         BotCommand(command="start", description="Iniciar o bot"),
         BotCommand(command="help", description="Obter ajuda sobre os comandos"),
         BotCommand(command="jornada", description="Registrar-se no bot"),

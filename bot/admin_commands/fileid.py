@@ -1,7 +1,10 @@
-from aiogram import Router, types, F
-from aiogram.filters import Command, CommandObject
+from aiogram import Router
+from aiogram.filters import Command
 from aiogram.enums import ParseMode
 from aiogram.types import Message
+from database.session import get_session
+from database.models import User
+from sqlalchemy.future import select
 
 router = Router()
 
@@ -12,6 +15,18 @@ async def enviar_fileid(message: Message):
     # Verificar se estamos em um grupo
     is_group = message.chat.type in ["group", "supergroup"]
     
+    # Check if the user is an admin
+    async with get_session() as session:
+        result = await session.execute(select(User).where(User.id == message.from_user.id))
+        user = result.scalar_one_or_none()
+
+        if not user or user.is_admin == 0:
+            await message.reply(
+                "🚫 **Acesso negado!** Somente administradores podem usar este comando.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
     if not replied:
         await message.reply("Por favor, responda a uma mensagem que contenha uma imagem.")
         return
