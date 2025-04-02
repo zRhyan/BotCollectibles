@@ -29,6 +29,7 @@ from commands.roubar import router as roubar_router
 from commands.pokedex import router as pokedex_router
 from commands.favpoke import router as favpoke_router
 from commands.ginasio import router as ginasio_router
+from admin_commands.fileid import router as fileid_router
 
 from admin_commands.addcarta import router as addcarta_router
 from admin_commands.rclicar import router as rclicar_router
@@ -90,7 +91,8 @@ dp.include_router(jornada_router)
 dp.include_router(pokedex_router)
 dp.include_router(mochila_router)
 dp.include_router(pokebanco_router)
-dp
+dp.include_router(ginasio_router)
+dp.include_router(fileid_router)
 dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
 dp.include_router(favpoke_router)
