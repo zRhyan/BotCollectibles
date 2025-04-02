@@ -17,13 +17,13 @@ async def enviar_fileid(message: Message):
     if replied.photo:
         photo = replied.photo[-1]
         file_id = photo.file_id
-        await message.reply(f"file_id da imagem (photo):\n`{file_id}`", parse_mode="Markdown")
+        await message.reply(f"file_id da imagem (photo):\n`{file_id}`", parse_mode=ParseMode.MARKDOWN)
         return
 
     # Caso 2: imagem enviada como arquivo (document)
-    if replied.document and replied.document.mime_type.startswith("image/"):
+    if replied.document and replied.document.mime_type and replied.document.mime_type.startswith("image/"):
         file_id = replied.document.file_id
-        await message.reply(f"file_id da imagem (document):\n`{file_id}`", parse_mode="Markdown")
+        await message.reply(f"file_id da imagem (document):\n`{file_id}`", parse_mode=ParseMode.MARKDOWN)
         return
 
     await message.reply("A mensagem respondida não contém uma imagem válida (foto ou imagem enviada como arquivo).")
