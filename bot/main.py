@@ -112,7 +112,7 @@ dp.include_router(pokemart_router)
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
-dp.message.middleware(LoggingMiddleware())
+#dp.message.middleware(LoggingMiddleware())
 
 #------------------------------------------------------
 # Bot command menu
