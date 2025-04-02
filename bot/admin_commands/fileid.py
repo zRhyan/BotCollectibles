@@ -7,17 +7,23 @@ router = Router()
 
 @router.message(Command("fileid"))
 async def enviar_fileid(message: Message):
-    # Verifica se está respondendo a alguma mensagem
-    if not message.reply_to_message:
-        await message.reply("Por favor, responda a uma imagem com o comando /fileid.")
-        return
-
     replied = message.reply_to_message
 
-    # Verifica se a mensagem respondida contém uma foto
+    if not replied:
+        await message.reply("Por favor, responda a uma mensagem que contenha uma imagem.")
+        return
+
+    # Caso 1: imagem padrão (tipo "foto")
     if replied.photo:
-        photo = replied.photo[-1]  # Pega a imagem com maior resolução
+        photo = replied.photo[-1]
         file_id = photo.file_id
-        await message.reply(f"`{file_id}`", parse_mode="Markdown")
-    else:
-        await message.reply("A mensagem que você respondeu não contém uma imagem.")
+        await message.reply(f"file_id da imagem (photo):\n`{file_id}`", parse_mode="Markdown")
+        return
+
+    # Caso 2: imagem enviada como arquivo (document)
+    if replied.document and replied.document.mime_type.startswith("image/"):
+        file_id = replied.document.file_id
+        await message.reply(f"file_id da imagem (document):\n`{file_id}`", parse_mode="Markdown")
+        return
+
+    await message.reply("A mensagem respondida não contém uma imagem válida (foto ou imagem enviada como arquivo).")
