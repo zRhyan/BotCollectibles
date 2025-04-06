@@ -88,12 +88,9 @@ async def handle_category_choice(callback: CallbackQuery):
     """
     Handles the user tapping on a category button:
     1) Verifies that the callback is from the correct user.
-    2) Deducts 1 pokebola from the user.
-    3) Determines the target rarity based on probability.
-    4) Selects a random card from that category with the target rarity.
-       If no card is found, falls back to any card in that category.
-    5) Adds the card to the user's inventory.
-    6) Shows the result with an image + stats using the card's actual rarity.
+    2) Retrieves all groups from the chosen category.
+    3) Randomly selects up to five distinct groups.
+    4) Shows these group options to the user for the next step.
     """
     data_parts = callback.data.split("_")
     # Expected format: "choose_cat_{user_id}_{category_id}"
@@ -127,6 +124,87 @@ async def handle_category_choice(callback: CallbackQuery):
             )
             return
 
+        # Retrieve all groups for this category
+        groups_result = await session.execute(
+            select(Group).where(Group.category_id == category_id)
+        )
+        all_groups = groups_result.scalars().all()
+
+        if not all_groups:
+            await callback.message.edit_text(
+                "⚠️ Nenhum grupo encontrado nesta categoria.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        # Shuffle and slice up to 5 groups
+        random.shuffle(all_groups)
+        groups_to_show = all_groups[:5]
+
+        # Build an inline keyboard of groups
+        keyboard = InlineKeyboardBuilder()
+        for index, grp in enumerate(groups_to_show):
+            # New callback data format for group selection:
+            # choose_group_{user_id}_{category_id}_{group_id}
+            keyboard.button(
+                text=grp.name.upper(),
+                callback_data=f"choose_group_{user_id}_{category_id}_{grp.id}"
+            )
+            if (index + 1) % 2 == 0:
+                keyboard.adjust(2)
+        keyboard.adjust(2)
+
+        await callback.message.edit_text(
+            text="Selecione um grupo para tentar capturar:",
+            reply_markup=keyboard.as_markup(),
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+@router.callback_query(lambda call: call.data.startswith("choose_group_"))
+async def handle_group_choice(callback: CallbackQuery):
+    """
+    Handles the user tapping on a group button:
+    1) Verifies that the callback is from the correct user.
+    2) Deducts 1 pokebola from the user.
+    3) Determines the target rarity based on probability.
+    4) Selects a random card from that group with the target rarity.
+       If no card is found, falls back to any card in that group.
+    5) Adds the card to the user's inventory.
+    6) Shows the result with an image + stats using the card's actual rarity.
+    """
+    data_parts = callback.data.split("_")
+    # Expected format: "choose_group_{user_id}_{category_id}_{group_id}"
+    if len(data_parts) < 5:
+        await callback.answer("Dados inválidos.", show_alert=True)
+        return
+
+    expected_user_id = int(data_parts[2])
+    if callback.from_user.id != expected_user_id:
+        await callback.answer("Você não pode usar este botão.", show_alert=True)
+        return
+
+    category_id = int(data_parts[3])
+    group_id = int(data_parts[4])
+    user_id = callback.from_user.id
+
+    async with get_session() as session:
+        # Get the user
+        user = await session.get(User, user_id)
+        if not user:
+            await callback.message.edit_text(
+                "❌ Você não se registrou ainda!\nUse `/jornada` para iniciar sua aventura.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
+        if user.pokeballs <= 0:
+            await callback.message.edit_text(
+                "🎯 **Você está sem pokébolas!**\n"
+                "Adquira mais antes de tentar capturar um card.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+
         # Deduct 1 pokebola
         user.pokeballs -= 1
         await session.commit()
@@ -140,22 +218,20 @@ async def handle_category_choice(callback: CallbackQuery):
         else:
             target_rarity = "🥇"
 
-        # Get a random card in that category with the target rarity
+        # Get a random card in that group with the target rarity
         card_result = await session.execute(
             select(Card)
-            .join(Card.group)
-            .where(Group.category_id == category_id, Card.rarity == target_rarity)
+            .where(Card.group_id == group_id, Card.rarity == target_rarity)
             .order_by(func.random())
             .limit(1)
         )
         card = card_result.scalar_one_or_none()
 
-        # If no card found for the target rarity, fallback to any card in that category
+        # If no card found for the target rarity, fallback to any card in that group
         if not card:
             card_result = await session.execute(
                 select(Card)
-                .join(Card.group)
-                .where(Group.category_id == category_id)
+                .where(Card.group_id == group_id)
                 .order_by(func.random())
                 .limit(1)
             )
@@ -163,7 +239,7 @@ async def handle_category_choice(callback: CallbackQuery):
 
         if not card:
             await callback.message.edit_text(
-                "⚠️ Nenhum card foi encontrado nessa categoria no momento.",
+                "⚠️ Nenhum card foi encontrado neste grupo no momento.",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
@@ -184,9 +260,12 @@ async def handle_category_choice(callback: CallbackQuery):
             session.add(new_inv)
         await session.commit()
 
-        # Show the result to the user
+        # Gather information for the caption
         category_obj = await session.get(Category, category_id)
         category_name = category_obj.name if category_obj else "Desconhecida"
+
+        group_obj = await session.get(Group, group_id)
+        group_name = group_obj.name if group_obj else "Desconhecido"
 
         user_nickname = callback.from_user.username or "Treinador"
         final_rarity = card.rarity
@@ -194,7 +273,8 @@ async def handle_category_choice(callback: CallbackQuery):
         caption = (
             f"🎰 Que sorte, @{user_nickname}! você acabou de capturar um pokecard.\n\n"
             f"{final_rarity}{card.id}. {card.name} (1x)\n"
-            f"📚 {category_name}\n\n"
+            f"📚 Categoria: {category_name}\n"
+            f"📁 Grupo: {group_name}\n\n"
             f"🃏 Você agora tem {inv_item.quantity if inv_item else 1} deste card.\n\n"
             f"🎒Pokébolas restantes: {user.pokeballs}"
         )
