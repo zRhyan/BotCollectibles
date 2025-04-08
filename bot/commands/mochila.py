@@ -51,6 +51,28 @@ async def mochila_command(message: Message, command: CommandObject):
         )
         inventory = result.all()
 
+        # Separar a carta favorita
+        fav_card = None
+        if target_user.fav_card_id:
+            fav_card_result = await session.execute(
+                select(Card).where(Card.id == target_user.fav_card_id)
+            )
+            fav_card = fav_card_result.scalar_one_or_none()
+
+    # Enviar a mensagem da carta favorita separadamente
+    if fav_card and fav_card.image_file_id:
+        fav_text = (
+            f"{target_user.fav_emoji or ''} {fav_card.id}. {fav_card.name}\n"
+            f"Raridade: {fav_card.rarity}\n\n"
+            f"👤 @{target_user.nickname or target_user.username or 'Usuário'}"
+        )
+        await message.answer_photo(
+            photo=fav_card.image_file_id,
+            caption=fav_text,
+            parse_mode=ParseMode.MARKDOWN
+        )
+
+    # Exibir inventário paginado
     if not inventory:
         await message.answer(
             f"🎒 **A mochila de @{target_user.username or target_user.nickname} está vazia!**\n"
@@ -65,9 +87,7 @@ async def mochila_command(message: Message, command: CommandObject):
         inventory,
         page=1,
         user_id=target_user.id,
-        nickname=target_user.nickname or target_user.username or "Usuário",
-        fav_card_id=target_user.fav_card_id,
-        fav_emoji=target_user.fav_emoji
+        nickname=target_user.nickname or target_user.username or "Usuário"
     )
 
 
@@ -76,9 +96,7 @@ async def send_mochila_page(
     inventory: list,
     page: int,
     user_id: int,
-    nickname: str,
-    fav_card_id: int | None = None,
-    fav_emoji: str | None = None
+    nickname: str
 ):
     items_per_page = 10
     start_index = (page - 1) * items_per_page
@@ -87,18 +105,12 @@ async def send_mochila_page(
     page_items = inventory[start_index:end_index]
 
     lines = []
-    fav_card = None
     for i, (inv, card, group, category) in enumerate(page_items, start=start_index + 1):
         line = f"{card.rarity}{card.id}. {card.name} ({inv.quantity}x)"
         lines.append(line)
-        if fav_card_id and card.id == fav_card_id:
-            fav_card = card
 
     inventory_text = "\n".join(lines)
     header = f"🎒 Uau, @{nickname}! Aqui está sua mochila:\n\n"
-    if fav_card_id and fav_emoji and fav_card:
-        header = f"{fav_emoji} {fav_card.id}. {fav_card.name}\n\n" + header
-
     text = f"{header}{inventory_text}\n\nPágina {page}/{total_pages}"
 
     keyboard = InlineKeyboardBuilder()
@@ -115,35 +127,17 @@ async def send_mochila_page(
     keyboard.adjust(2)
 
     if isinstance(message_or_callback, CallbackQuery):
-        if fav_card and fav_card.image_file_id:
-            await message_or_callback.message.edit_media(
-                media=InputMediaPhoto(
-                    media=fav_card.image_file_id,
-                    caption=text,
-                    parse_mode=ParseMode.MARKDOWN
-                ),
-                reply_markup=keyboard.as_markup()
-            )
-        else:
-            await message_or_callback.message.edit_text(
-                text,
-                reply_markup=keyboard.as_markup(),
-                parse_mode=ParseMode.MARKDOWN
-            )
+        await message_or_callback.message.edit_text(
+            text,
+            reply_markup=keyboard.as_markup(),
+            parse_mode=ParseMode.MARKDOWN
+        )
     else:
-        if fav_card and fav_card.image_file_id:
-            await message_or_callback.answer_photo(
-                photo=fav_card.image_file_id,
-                caption=text,
-                reply_markup=keyboard.as_markup(),
-                parse_mode=ParseMode.MARKDOWN
-            )
-        else:
-            await message_or_callback.answer(
-                text,
-                reply_markup=keyboard.as_markup(),
-                parse_mode=ParseMode.MARKDOWN
-            )
+        await message_or_callback.answer(
+            text,
+            reply_markup=keyboard.as_markup(),
+            parse_mode=ParseMode.MARKDOWN
+        )
 
 
 @router.callback_query(F.data.startswith("mochila_page_"))
@@ -181,7 +175,5 @@ async def mochila_pagination_callback(callback: CallbackQuery):
         inventory,
         page,
         user_id=user.id,
-        nickname=user.nickname or user.username or "Usuário",
-        fav_card_id=user.fav_card_id,
-        fav_emoji=user.fav_emoji
+        nickname=user.nickname or user.username or "Usuário"
     )
