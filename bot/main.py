@@ -3,7 +3,7 @@ import logging
 import sys
 import os
 from aiogram import Bot, Dispatcher
-from aiogram.types import BotCommand
+from aiogram.types import BotCommand, Message
 from aiogram.filters import Command
 from dotenv import load_dotenv
 
@@ -182,6 +182,27 @@ async def set_bot_commands(bot: Bot):
             logging.info(f"Admin commands set for user {admin.id} (@{admin.username})")
         except Exception as e:
             logging.error(f"Failed to set admin commands for user {admin.id}: {e}")
+
+async def admin_only_middleware(handler, event: Message, data: dict):
+    """
+    Temporary middleware to restrict bot usage to admins only.
+    """
+    user_id = event.from_user.id
+
+    # Check if the user is an admin in the database
+    async with get_session() as session:
+        result = await session.execute(select(User).where(User.id == user_id))
+        user = result.scalar()
+
+        if not user or user.is_admin != 1:
+            await event.answer("Apenas administradores podem usar este bot.")
+            return  # Block further processing
+
+    # Continue to the next handler
+    return await handler(event, data)
+
+# Register the temporary middleware
+dp.message.middleware(admin_only_middleware)
 
 # Run the bot
 async def main():
