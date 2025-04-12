@@ -43,6 +43,7 @@ from database.session import engine
 # Middleware imports
 from middlewares.logging_middleware import LoggingMiddleware
 from middlewares.anti_flood_middleware import AntiFloodMiddleware
+from middlewares.registration_middleware import RegistrationMiddleware
 
 #------------------------------------------------------
 # Teporary function to recreate the database schema
@@ -112,6 +113,7 @@ dp.include_router(pokemart_router)
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
+dp.message.middleware(RegistrationMiddleware())
 #dp.message.middleware(LoggingMiddleware())
 
 #------------------------------------------------------
@@ -182,27 +184,6 @@ async def set_bot_commands(bot: Bot):
             logging.info(f"Admin commands set for user {admin.id} (@{admin.username})")
         except Exception as e:
             logging.error(f"Failed to set admin commands for user {admin.id}: {e}")
-
-async def admin_only_middleware(handler, event: Message, data: dict):
-    """
-    Temporary middleware to restrict bot usage to admins only.
-    """
-    user_id = event.from_user.id
-
-    # Check if the user is an admin in the database
-    async with get_session() as session:
-        result = await session.execute(select(User).where(User.id == user_id))
-        user = result.scalar()
-
-        if not user or user.is_admin != 1:
-            await event.answer("Apenas administradores podem usar este bot.")
-            return  # Block further processing
-
-    # Continue to the next handler
-    return await handler(event, data)
-
-# Register the temporary middleware
-dp.message.middleware(admin_only_middleware)
 
 # Run the bot
 async def main():
