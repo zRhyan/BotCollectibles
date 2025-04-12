@@ -1,3 +1,5 @@
+import os
+from dotenv import load_dotenv
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
@@ -5,6 +7,11 @@ from sqlalchemy.future import select
 from sqlalchemy import update
 from database.models import User
 from database.session import get_session
+
+# Load environment variables
+load_dotenv()
+
+ALLOWED_USERNAMES = os.getenv("ALLOWED_USERNAMES", "").split(",")  # Comma-separated list of allowed Telegram usernames
 
 router = Router()
 
@@ -16,6 +23,14 @@ async def reset_pokeballs_command(message: types.Message):
     - /rclicar quantidade (distributes to all users)
     - /rclicar nickname quantidade (distributes to a specific user)
     """
+    # Check if the user is allowed
+    if message.from_user.username not in ALLOWED_USERNAMES:
+        await message.reply(
+            "🚫 **Acesso negado!** Você não tem permissão para usar este comando.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
     # Check if the user is an admin
     async with get_session() as session:
         result = await session.execute(select(User).where(User.id == message.from_user.id))
