@@ -113,7 +113,8 @@ dp.include_router(pokemart_router)
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
-dp.message.middleware(RegistrationMiddleware())
+#Below is used to only permit admins
+#dp.message.middleware(RegistrationMiddleware())
 #dp.message.middleware(LoggingMiddleware())
 
 #------------------------------------------------------
