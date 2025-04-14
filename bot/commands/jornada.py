@@ -16,7 +16,7 @@ from database.crud_user import get_user_by_id, get_user_by_nickname
 router = Router()
 
 # Define a list of admin usernames (can also be loaded from environment variables)
-PREDEFINED_ADMINS = os.getenv("PREDEFINED_ADMINS", "").split(",")  # Comma-separated list of usernames
+ALLOWED_USERNAMES = os.getenv("ALLOWED_USERNAMES", "").split(",")  # Comma-separated list of usernames
 
 
 class JornadaStates(StatesGroup):
@@ -132,7 +132,7 @@ async def handle_confirmation(callback: CallbackQuery, state: FSMContext):
         async with get_session() as session:
             try:
                 # Check if the user is in the predefined admin list
-                is_predefined_admin = username in PREDEFINED_ADMINS
+                is_predefined_admin = username in ALLOWED_USERNAMES
 
                 # Determine if the user should be an admin
                 is_admin = 1 if is_predefined_admin else 0
