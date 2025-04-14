@@ -44,7 +44,7 @@ async def jornada_command(message: Message, state: FSMContext):
             return
     except Exception:
         await message.answer(
-            "⚠️ Não foi possível verificar sua associação ao [Instituto de Informações de Pokedéx](https://t.me/pokunews). "
+            "⚠️ Não foi possível verificar sua associação ao [Instituto de Informações de Pokedéx](https://t.me/newspoku). "
             "Por favor, entre no canal e tente novamente.",
             parse_mode="Markdown"
         )
