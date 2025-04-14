@@ -8,7 +8,7 @@ async def start_command(message: Message):
     welcome_message = (
         f"🎑 *Seja bem-vindo, {user_name}!*\n\n"
         "Se você deseja ser um treinador informado e cheio de vantagens, entre no nosso "
-        "[Instituto de Informações de Pokedéx](https://t.me/pokunews). Somente assim você poderá usar os comandos necessários "
+        "[Instituto de Informações de Pokedéx](https://t.me/newspoku). Somente assim você poderá usar os comandos necessários "
         "para conseguir seus amados pokémons!\n\n"
         "🏆 *Que sua aventura seja sábia e seu lugar no Ginásio seja garantido!* E lembre-se: nosso Poku está esperando por você!!"
     )

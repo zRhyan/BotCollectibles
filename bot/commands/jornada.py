@@ -32,7 +32,7 @@ async def jornada_command(message: Message, state: FSMContext):
     # Access the bot instance from the message object
     bot = message.bot
 
-    # Check if the user is a member of @pokunews
+    # Check if the user is a member of @newspoku
     try:
         member = await bot.get_chat_member("@pokunews", user_id)
         if member.status not in ["member", "administrator", "creator"]:
