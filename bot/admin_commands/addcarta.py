@@ -3,9 +3,14 @@ from aiogram.filters import Command
 from aiogram.enums import ParseMode
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import User, Card, Group, Category, Tag, card_tags
 from database.session import get_session
 from bot.utils.image_utils import ensure_photo_file_id
+import logging
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -101,67 +106,82 @@ async def add_card(message: types.Message):
 
     # Save the card in the database
     async with get_session() as session:
-        try:
-            # Ensure the category exists
-            result = await session.execute(select(Category).where(Category.name == category_name))
-            category = result.scalar_one_or_none()
-            if not category:
-                category = Category(name=category_name)
-                session.add(category)
-                await session.flush()  # Ensure the category ID is available
+        # Start transaction with SERIALIZABLE isolation level
+        async with session.begin() as transaction:
+            try:
+                # Ensure the category exists
+                result = await session.execute(select(Category).where(Category.name == category_name))
+                category = result.scalar_one_or_none()
+                if not category:
+                    category = Category(name=category_name)
+                    session.add(category)
+                    await session.flush()  # Ensure the category ID is available
 
-            # Ensure the group exists
-            result = await session.execute(select(Group).where(Group.name == group_name, Group.category_id == category.id))
-            group = result.scalar_one_or_none()
-            if not group:
-                group = Group(name=group_name, category_id=category.id)
-                session.add(group)
-                await session.flush()  # Ensure the group ID is available
+                # Ensure the group exists
+                result = await session.execute(select(Group).where(Group.name == group_name, Group.category_id == category.id))
+                group = result.scalar_one_or_none()
+                if not group:
+                    group = Group(name=group_name, category_id=category.id)
+                    session.add(group)
+                    await session.flush()  # Ensure the group ID is available
 
-            # Ensure the tag exists (if provided)
-            tag = None
-            if tag_name:
-                result = await session.execute(select(Tag).where(Tag.name == tag_name))
-                tag = result.scalar_one_or_none()
-                if not tag:
-                    tag = Tag(name=tag_name)
-                    session.add(tag)
-                    await session.flush()  # Ensure the tag ID is available
+                # Ensure the tag exists (if provided)
+                tag = None
+                if tag_name:
+                    result = await session.execute(select(Tag).where(Tag.name == tag_name))
+                    tag = result.scalar_one_or_none()
+                    if not tag:
+                        tag = Tag(name=tag_name)
+                        session.add(tag)
+                        await session.flush()  # Ensure the tag ID is available
 
-            # Check if the card already exists
-            result = await session.execute(select(Card).where(Card.name == card_name))
-            if result.scalar_one_or_none():
+                # Check if the card already exists
+                result = await session.execute(select(Card).where(Card.name == card_name))
+                if result.scalar_one_or_none():
+                    await message.reply(
+                        "❌ **Erro:** Um card com este nome já existe no sistema.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return
+
+                # Log attempt
+                logger.info(f"Attempting to add card: {card_name}")
+                
+                new_card = Card(
+                    name=card_name,
+                    rarity=rarity,
+                    image_file_id=photo_file_id,
+                    group_id=group.id
+                )
+                session.add(new_card)
+                await session.flush()
+                
+                # Log success
+                logger.info(f"Card added successfully with ID: {new_card.id}")
+
+                # Associate the card with the tag (if provided)
+                if tag:
+                    await session.execute(card_tags.insert().values(card_id=new_card.id, tag_id=tag.id))
+
+                await transaction.commit()
+
+                # Confirm success
                 await message.reply(
-                    "❌ **Erro:** Um card com este nome já existe no sistema.",
+                    f"✅ **Sucesso!** O card '{card_name}' (ID: {new_card.id}) foi adicionado ao sistema! 🃏✨",
                     parse_mode=ParseMode.MARKDOWN
                 )
-                return
 
-            # Add the new card
-            new_card = Card(
-                name=card_name,
-                rarity=rarity,
-                image_file_id=photo_file_id,
-                group_id=group.id
-            )
-            session.add(new_card)
-            await session.flush()  # Ensure the card ID is available
-
-            # Associate the card with the tag (if provided)
-            if tag:
-                await session.execute(card_tags.insert().values(card_id=new_card.id, tag_id=tag.id))
-
-            await session.commit()
-
-            # Confirm success
-            await message.reply(
-                f"✅ **Sucesso!** O card '{card_name}' foi adicionado ao sistema! 🃏✨",
-                parse_mode=ParseMode.MARKDOWN
-            )
-
-        except IntegrityError:
-            await session.rollback()
-            await message.reply(
-                "❌ **Erro:** Ocorreu um problema ao salvar o card no banco de dados.",
-                parse_mode=ParseMode.MARKDOWN
-            )
+            except IntegrityError as e:
+                await transaction.rollback()
+                logger.error(f"IntegrityError while adding card '{card_name}': {str(e)}")
+                await message.reply(
+                    "❌ **Erro:** Ocorreu um problema ao salvar o card no banco de dados.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as e:
+                await transaction.rollback()
+                logger.error(f"Unexpected error while adding card '{card_name}': {str(e)}")
+                await message.reply(
+                    "❌ **Erro interno:** Não foi possível adicionar o card.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
