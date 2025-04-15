@@ -34,7 +34,7 @@ async def jornada_command(message: Message, state: FSMContext):
 
     # Check if the user is a member of @newspoku
     try:
-        member = await bot.get_chat_member("@pokunews", user_id)
+        member = await bot.get_chat_member("@newspoku", user_id)
         if member.status not in ["member", "administrator", "creator"]:
             await message.answer(
                 "⚠️ Você precisa ser membro do [Instituto de Informações de Pokedéx](https://t.me/newspoku) "

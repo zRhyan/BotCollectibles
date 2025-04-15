@@ -5,6 +5,7 @@ from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
 from database.models import User, Card, Group, Category, Tag, card_tags
 from database.session import get_session
+from bot.utils.image_utils import ensure_photo_file_id
 
 router = Router()
 
@@ -34,11 +35,9 @@ async def add_card(message: types.Message):
         )
         return
 
-    # Extract the image file ID
-    photo_file_id = None
+    # Extract the image and convert if necessary
     if message.reply_to_message.photo:
-        # Get the highest resolution image
-        photo_file_id = message.reply_to_message.photo[-1].file_id
+        photo_file_id = await ensure_photo_file_id(message.bot, message.reply_to_message.photo[-1])
     elif message.reply_to_message.document:
         # Check if the document is an image
         document = message.reply_to_message.document
@@ -49,7 +48,7 @@ async def add_card(message: types.Message):
                 parse_mode=ParseMode.MARKDOWN
             )
             return
-        photo_file_id = document.file_id
+        photo_file_id = await ensure_photo_file_id(message.bot, document)
     else:
         await message.reply(
             "❗ **Erro:** A mensagem respondida deve conter uma imagem ou um arquivo de imagem válido.",
