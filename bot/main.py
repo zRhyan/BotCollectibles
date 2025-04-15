@@ -118,9 +118,9 @@ dp.message.middleware(RegistrationMiddleware())
 dp.callback_query.middleware(RegistrationMiddleware())
 #dp.message.middleware(LoggingMiddleware())
 
-#------------------------------------------------------
+#-------------------------------------------------------
 # Bot command menu
-#------------------------------------------------------
+#-------------------------------------------------------
 from sqlalchemy.future import select
 from database.session import get_session
 from database.models import User
