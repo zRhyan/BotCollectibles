@@ -1,10 +1,11 @@
 from aiogram import Router, types
 from aiogram.enums import ParseMode
 from aiogram.filters import Command
-from sqlalchemy import select
+from sqlalchemy import select, update
 from database.session import get_session
 from database.models import Card, Group, Category, Tag, Inventory
 from sqlalchemy.orm import joinedload
+from bot.utils.image_utils import ensure_photo_file_id
 
 router = Router()
 
@@ -116,13 +117,33 @@ async def pokebola_command(message: types.Message):
                     parse_mode=ParseMode.MARKDOWN
                 )
             except Exception as e:
-                # If the error is due to a document being sent as a photo, send as document
+                # If the error is due to a document being sent as a photo, convert it
                 if "can't use file of type Document as Photo" in str(e):
-                    await message.answer_document(
-                        document=card.image_file_id,
-                        caption=caption,
-                        parse_mode=ParseMode.MARKDOWN
-                    )
+                    try:
+                        # Convert document to photo and get new file_id
+                        new_photo_id = await ensure_photo_file_id(message.bot, types.Document(file_id=card.image_file_id))
+                        
+                        # Update the card in database with new photo file_id
+                        await session.execute(
+                            update(Card)
+                            .where(Card.id == card.id)
+                            .values(image_file_id=new_photo_id)
+                        )
+                        await session.commit()
+                        
+                        # Send the converted photo
+                        await message.answer_photo(
+                            photo=new_photo_id,
+                            caption=caption,
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    except Exception as conv_error:
+                        # Fallback to document if conversion fails
+                        await message.answer_document(
+                            document=card.image_file_id,
+                            caption=caption,
+                            parse_mode=ParseMode.MARKDOWN
+                        )
                 else:
                     # Fallback to text for any other error
                     await message.reply(
