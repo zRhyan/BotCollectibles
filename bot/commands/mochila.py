@@ -91,6 +91,10 @@ async def mochila_command(message: Message, command: CommandObject):
     )
 
 
+def get_rarity_weight(rarity: str) -> int:
+    weights = {"🥇": 1, "🥈": 2, "🥉": 3}
+    return weights.get(rarity, 4)
+
 async def send_mochila_page(
     message_or_callback: Message | CallbackQuery,
     inventory: list,
@@ -102,7 +106,13 @@ async def send_mochila_page(
     start_index = (page - 1) * items_per_page
     end_index = start_index + items_per_page
     total_pages = (len(inventory) + items_per_page - 1) // items_per_page
-    page_items = inventory[start_index:end_index]
+    
+    # Ordenar o inventário por raridade e ID
+    sorted_inventory = sorted(
+        inventory,
+        key=lambda x: (get_rarity_weight(x[1].rarity), x[1].id)
+    )
+    page_items = sorted_inventory[start_index:end_index]
 
     lines = []
     for i, (inv, card, group, category) in enumerate(page_items, start=start_index + 1):

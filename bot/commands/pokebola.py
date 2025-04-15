@@ -77,32 +77,26 @@ async def pokebola_command(message: types.Message):
             )
             return
 
-        # Check if the user has the card in their inventory
+        # Remover verificação de inventário e modificar para mostrar quantidade se tiver
         inventory_item = await session.execute(
             select(Inventory)
             .where(Inventory.user_id == message.from_user.id, Inventory.card_id == card.id)
         )
         inventory_item = inventory_item.scalar_one_or_none()
-
-        if not inventory_item:
-            await message.reply(
-                "❌ **Erro:** Você não possui este card na sua mochila.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
+        quantity_text = f" ({inventory_item.quantity}x)" if inventory_item else " (0x)"
 
         # Construção do caption formatado corretamente
         group = card.group
         category = group.name if group else "Nenhum"
-        tags = [tag.name for tag in card.tags]  # lista, pode estar vazia
+        tags = [tag.name for tag in card.tags]
         has_tags = len(tags) > 0
 
         # Linha da tag, se existir
         tag_line = f"🏷️ {', '.join(tags)}\n" if has_tags else ""
 
         caption = (
-            f"🎒Uau, @{message.from_user.username or 'usuário'}! encontrei na sua mochila o seguinte pokecard\n\n"
-            f"{card.rarity}{card.id}. {card.name} ({inventory_item.quantity}x)\n"
+            f"🎴 Card encontrado:\n\n"
+            f"{card.rarity}{card.id}. {card.name}{quantity_text}\n"
             f"📚 {category}\n"
             f"{tag_line}"
         )
