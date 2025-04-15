@@ -17,6 +17,8 @@ RARITY_EMOJIS = {
     "🥉": "🥉"
 }
 
+CARDS_PER_PAGE = 30
+
 def build_categories_keyboard(categories: list[Category]) -> InlineKeyboardMarkup:
     buttons = []
     for cat in categories:
@@ -33,24 +35,57 @@ def build_groups_keyboard(groups: list[Group]) -> InlineKeyboardMarkup:
         buttons.append([InlineKeyboardButton(text=btn_text, callback_data=btn_data)])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
-def format_group_cards(cards: list[Card], user_inventory: dict[int, int], group_id: int, group_name: str, user_id: int) -> str:
+def format_group_cards(
+    cards: list[Card], 
+    user_inventory: dict[int, int], 
+    group_id: int, 
+    group_name: str, 
+    user_id: int,
+    page: int = 1
+) -> tuple[str, int]:
+    """Returns (formatted_text, total_pages)"""
     sorted_cards = sorted(cards, key=lambda c: (c.rarity, c.id))
+    total_pages = (len(sorted_cards) + CARDS_PER_PAGE - 1) // CARDS_PER_PAGE
+    
+    start_idx = (page - 1) * CARDS_PER_PAGE
+    end_idx = start_idx + CARDS_PER_PAGE
+    page_cards = sorted_cards[start_idx:end_idx]
+    
     lines = []
-    total_cards_user_owns = 0
-
-    for card in sorted_cards:
+    total_cards_user_owns = sum(user_inventory.get(card.id, 0) for card in cards)
+    
+    for card in page_cards:
         user_qty = user_inventory.get(card.id, 0)
         rarity_emoji = RARITY_EMOJIS.get(card.rarity, card.rarity)
         lines.append(f"{rarity_emoji}{card.id}. {card.name} ({user_qty}x)")
-        total_cards_user_owns += user_qty
-
-    total_cards_in_group = len(cards)
 
     return (
-        f"🌼 Encontrei na Pokédex do grupo {group_id}. {group_name} os seguintes cards:\n\n"
-        + "\n".join(lines)
-        + f"\n\nNo seu inventário há {total_cards_user_owns} de {total_cards_in_group} cards deste grupo."
-    )
+        f"🌼 Pokédex do grupo {group_id}. {group_name}"
+        f"\nPágina {page}/{total_pages}\n\n"
+        f"{chr(10).join(lines)}\n\n"
+        f"No seu inventário há {total_cards_user_owns} de {len(cards)} cards deste grupo."
+    ), total_pages
+
+def build_group_navigation_keyboard(group_id: int, current_page: int, total_pages: int) -> InlineKeyboardMarkup:
+    buttons = []
+    row = []
+    
+    if current_page > 1:
+        row.append(InlineKeyboardButton(
+            text="⬅️ Anterior",
+            callback_data=f"pokedex_group_page:{group_id}:{current_page-1}"
+        ))
+    
+    if current_page < total_pages:
+        row.append(InlineKeyboardButton(
+            text="Próximo ➡️",
+            callback_data=f"pokedex_group_page:{group_id}:{current_page+1}"
+        ))
+    
+    if row:
+        buttons.append(row)
+    
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 HELP_MESSAGE = """
 🎮 **Como usar o comando /pokedex**
@@ -181,34 +216,7 @@ async def pokedex_command(message: Message) -> None:
                 )
                 return
 
-            # Restante do código existente para mostrar cards do grupo
-            cards_result = await session.execute(select(Card).where(Card.group_id == group.id))
-            cards_in_group = cards_result.scalars().all()
-
-            inv_result = await session.execute(
-                select(Inventory)
-                .join(Inventory.card)
-                .where(Inventory.user_id == user_id, Card.group_id == group.id)
-            )
-            user_inventory_list = inv_result.scalars().all()
-            user_inventory_map = {inv.card_id: inv.quantity for inv in user_inventory_list}
-
-            caption = format_group_cards(
-                cards=cards_in_group,
-                user_inventory=user_inventory_map,
-                group_id=group.id,
-                group_name=group.name,
-                user_id=user_id
-            )
-
-            if group.image_file_id:
-                await message.answer_photo(
-                    photo=group.image_file_id,
-                    caption=caption,
-                    parse_mode=ParseMode.MARKDOWN
-                )
-            else:
-                await message.answer(caption, parse_mode=ParseMode.MARKDOWN)
+            await show_group_cards(message, group.id, user_id)
 
 @router.callback_query(lambda c: c.data.startswith("pokedex_category:"))
 async def pokedex_category_callback(callback: CallbackQuery) -> None:
@@ -259,13 +267,20 @@ async def pokedex_group_callback(callback: CallbackQuery) -> None:
 
     user_id = callback.from_user.id
 
+    await show_group_cards(callback, group_id, user_id)
+
+async def show_group_cards(message_or_callback: Message | CallbackQuery, group_id: int, user_id: int, page: int = 1) -> None:
     async with get_session() as session:
         group_result = await session.execute(select(Group).where(Group.id == group_id))
         group = group_result.scalar_one_or_none()
 
         if not group:
-            await callback.message.answer("Esse grupo não existe ou foi removido.")
-            await callback.answer()
+            msg = "Esse grupo não existe ou foi removido."
+            if isinstance(message_or_callback, CallbackQuery):
+                await message_or_callback.message.answer(msg)
+                await message_or_callback.answer()
+            else:
+                await message_or_callback.answer(msg)
             return
 
         cards_result = await session.execute(select(Card).where(Card.group_id == group_id))
@@ -279,21 +294,63 @@ async def pokedex_group_callback(callback: CallbackQuery) -> None:
         user_inventory_list = inv_result.scalars().all()
         user_inventory_map = {inv.card_id: inv.quantity for inv in user_inventory_list}
 
-        caption = format_group_cards(
+        caption, total_pages = format_group_cards(
             cards=cards_in_group,
             user_inventory=user_inventory_map,
             group_id=group.id,
             group_name=group.name,
-            user_id=user_id
+            user_id=user_id,
+            page=page
         )
 
-        if group.image_file_id:
-            await callback.message.answer_photo(
-                photo=group.image_file_id,
-                caption=caption,
-                parse_mode=ParseMode.MARKDOWN
-            )
-        else:
-            await callback.message.answer(caption, parse_mode=ParseMode.MARKDOWN)
+        keyboard = build_group_navigation_keyboard(group.id, page, total_pages)
 
-        await callback.answer()
+        if group.image_file_id:
+            if isinstance(message_or_callback, CallbackQuery):
+                try:
+                    await message_or_callback.message.edit_caption(
+                        caption=caption,
+                        reply_markup=keyboard,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                except Exception:
+                    # Se não conseguir editar, envia nova mensagem
+                    await message_or_callback.message.answer_photo(
+                        photo=group.image_file_id,
+                        caption=caption,
+                        reply_markup=keyboard,
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+            else:
+                await message_or_callback.answer_photo(
+                    photo=group.image_file_id,
+                    caption=caption,
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+        else:
+            if isinstance(message_or_callback, CallbackQuery):
+                await message_or_callback.message.edit_text(
+                    text=caption,
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                await message_or_callback.answer(
+                    text=caption,
+                    reply_markup=keyboard,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+
+@router.callback_query(lambda c: c.data.startswith("pokedex_group_page:"))
+async def handle_group_pagination(callback: CallbackQuery) -> None:
+    try:
+        _, group_id, page = callback.data.split(":")
+        group_id = int(group_id)
+        page = int(page)
+    except (ValueError, IndexError):
+        await callback.answer("Dados inválidos.", show_alert=True)
+        return
+
+    await show_group_cards(callback, group_id, callback.from_user.id, page)
+    await callback.answer()
