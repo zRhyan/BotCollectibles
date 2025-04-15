@@ -52,14 +52,32 @@ def format_group_cards(cards: list[Card], user_inventory: dict[int, int], group_
         + f"\n\nNo seu inventário há {total_cards_user_owns} de {total_cards_in_group} cards deste grupo."
     )
 
+HELP_MESSAGE = """
+🎮 **Como usar o comando /pokedex**
+
+📚 Ver todas as categorias:
+• `/pokedex` (sem argumentos)
+
+🔍 Buscar uma categoria específica:
+• `/pokedex c ID` - busca por ID
+• `/pokedex c Nome` - busca por nome
+
+🎴 Buscar um grupo específico:
+• `/pokedex g ID` - busca por ID
+• `/pokedex g Nome` - busca por nome
+
+Exemplo:
+• `/pokedex c 1`
+• `/pokedex g Pokemon`
+"""
+
 @router.message(Command(commands=["pokedex", "pd"]))
 async def pokedex_command(message: Message) -> None:
     user_id = message.from_user.id
-    parts = message.text.split(maxsplit=1)
-    argument = parts[1].strip() if len(parts) > 1 else None
-
-    # Caso não tenha argumento, mostrar categorias
-    if not argument:
+    parts = message.text.split(maxsplit=2)
+    
+    # Sem argumentos: mostrar categorias
+    if len(parts) == 1:
         async with get_session() as session:
             categories_result = await session.execute(
                 select(Category).options(selectinload(Category.groups))
@@ -74,56 +92,123 @@ async def pokedex_command(message: Message) -> None:
         await message.answer("📚 Escolha uma categoria para ver seus grupos:", reply_markup=kb)
         return
 
-    # Caso tenha argumento: buscar grupo por ID ou nome
+    # Comando com argumentos incorretos
+    if len(parts) != 3 or parts[1].lower() not in ['c', 'g']:
+        await message.answer(HELP_MESSAGE, parse_mode=ParseMode.MARKDOWN)
+        return
+
+    type_arg = parts[1].lower()
+    search_arg = parts[2]
+
     async with get_session() as session:
-        group = None
-        if argument.isdigit():
-            group_id = int(argument)
-            group_result = await session.execute(select(Group).where(Group.id == group_id))
-            group = group_result.scalar_one_or_none()
-        else:
-            group_result = await session.execute(select(Group).where(Group.name.ilike(f"%{argument}%")))
-            found = group_result.scalars().all()
-            if len(found) == 1:
-                group = found[0]
-            elif len(found) > 1:
+        if type_arg == 'c':  # Busca por categoria
+            category = None
+            if search_arg.isdigit():
+                cat_id = int(search_arg)
+                cat_result = await session.execute(select(Category).where(Category.id == cat_id))
+                category = cat_result.scalar_one_or_none()
+            else:
+                cat_result = await session.execute(select(Category).where(Category.name.ilike(f"%{search_arg}%")))
+                found = cat_result.scalars().all()
+                if len(found) == 1:
+                    category = found[0]
+                elif len(found) > 1:
+                    similar_cats = "\n".join(f"• ID {c.id}: {c.name}" for c in found)
+                    await message.reply(
+                        f"⚠️ **Múltiplas categorias encontradas com esse nome:**\n\n{similar_cats}\n\n"
+                        "Use o ID para ser mais específico.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return
+
+            if not category:
                 await message.reply(
-                    "⚠️ **Erro:** Mais de um grupo encontrado com esse nome. Use o ID com `/pokedex ID`.",
+                    "❌ **Categoria não encontrada**\nVerifique o ID ou nome e tente novamente.",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
 
-        if not group:
-            await message.reply("❌ Grupo não encontrado.", parse_mode=ParseMode.MARKDOWN)
-            return
+            # Buscar grupos da categoria
+            group_result = await session.execute(
+                select(Group)
+                .join(Group.cards)
+                .join(Card.inventory)
+                .where(Group.category_id == category.id, Inventory.user_id == user_id)
+                .options(selectinload(Group.category))
+            )
+            groups = list({g for g in group_result.scalars().all()})
 
-        cards_result = await session.execute(select(Card).where(Card.group_id == group.id))
-        cards_in_group = cards_result.scalars().all()
+            if not groups:
+                await message.reply(
+                    f"📝 **Categoria: {category.name}**\n\n"
+                    "Você não possui nenhum card dessa categoria ainda.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
 
-        inv_result = await session.execute(
-            select(Inventory)
-            .join(Inventory.card)
-            .where(Inventory.user_id == user_id, Card.group_id == group.id)
-        )
-        user_inventory_list = inv_result.scalars().all()
-        user_inventory_map = {inv.card_id: inv.quantity for inv in user_inventory_list}
-
-        caption = format_group_cards(
-            cards=cards_in_group,
-            user_inventory=user_inventory_map,
-            group_id=group.id,
-            group_name=group.name,
-            user_id=user_id
-        )
-
-        if group.image_file_id:
-            await message.answer_photo(
-                photo=group.image_file_id,
-                caption=caption,
+            kb = build_groups_keyboard(groups)
+            await message.reply(
+                f"📚 **Categoria: {category.name}**\n\n"
+                "Escolha um grupo para ver suas cartas:",
+                reply_markup=kb,
                 parse_mode=ParseMode.MARKDOWN
             )
-        else:
-            await message.answer(caption, parse_mode=ParseMode.MARKDOWN)
+
+        else:  # type_arg == 'g', busca por grupo
+            group = None
+            if search_arg.isdigit():
+                group_id = int(search_arg)
+                group_result = await session.execute(select(Group).where(Group.id == group_id))
+                group = group_result.scalar_one_or_none()
+            else:
+                group_result = await session.execute(select(Group).where(Group.name.ilike(f"%{search_arg}%")))
+                found = group_result.scalars().all()
+                if len(found) == 1:
+                    group = found[0]
+                elif len(found) > 1:
+                    similar_groups = "\n".join(f"• ID {g.id}: {g.name}" for g in found)
+                    await message.reply(
+                        f"⚠️ **Múltiplos grupos encontrados com esse nome:**\n\n{similar_groups}\n\n"
+                        "Use o ID para ser mais específico.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return
+
+            if not group:
+                await message.reply(
+                    "❌ **Grupo não encontrado**\nVerifique o ID ou nome e tente novamente.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
+            # Restante do código existente para mostrar cards do grupo
+            cards_result = await session.execute(select(Card).where(Card.group_id == group.id))
+            cards_in_group = cards_result.scalars().all()
+
+            inv_result = await session.execute(
+                select(Inventory)
+                .join(Inventory.card)
+                .where(Inventory.user_id == user_id, Card.group_id == group.id)
+            )
+            user_inventory_list = inv_result.scalars().all()
+            user_inventory_map = {inv.card_id: inv.quantity for inv in user_inventory_list}
+
+            caption = format_group_cards(
+                cards=cards_in_group,
+                user_inventory=user_inventory_map,
+                group_id=group.id,
+                group_name=group.name,
+                user_id=user_id
+            )
+
+            if group.image_file_id:
+                await message.answer_photo(
+                    photo=group.image_file_id,
+                    caption=caption,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            else:
+                await message.answer(caption, parse_mode=ParseMode.MARKDOWN)
 
 @router.callback_query(lambda c: c.data.startswith("pokedex_category:"))
 async def pokedex_category_callback(callback: CallbackQuery) -> None:
