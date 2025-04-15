@@ -95,11 +95,11 @@ HELP_MESSAGE = """
 
 🔍 Buscar uma categoria específica:
 • `/pokedex c ID` - busca por ID
-• `/pokedex c Nome` - busca por nome
+• `/pokedex c Nome` - busca pelo nome exato (não sensível a maiúsculas/minúsculas)
 
 🎴 Buscar um grupo específico:
 • `/pokedex g ID` - busca por ID
-• `/pokedex g Nome` - busca por nome
+• `/pokedex g Nome` - busca pelo nome exato (não sensível a maiúsculas/minúsculas)
 
 Exemplo:
 • `/pokedex c 1`
@@ -139,29 +139,44 @@ async def pokedex_command(message: Message) -> None:
         if type_arg == 'c':  # Busca por categoria
             category = None
             if search_arg.isdigit():
+                # Search by ID (exact)
                 cat_id = int(search_arg)
                 cat_result = await session.execute(select(Category).where(Category.id == cat_id))
                 category = cat_result.scalar_one_or_none()
             else:
-                cat_result = await session.execute(select(Category).where(Category.name.ilike(f"%{search_arg}%")))
-                found = cat_result.scalars().all()
-                if len(found) == 1:
-                    category = found[0]
-                elif len(found) > 1:
-                    similar_cats = "\n".join(f"• ID {c.id}: {c.name}" for c in found)
-                    await message.reply(
-                        f"⚠️ **Múltiplas categorias encontradas com esse nome:**\n\n{similar_cats}\n\n"
-                        "Use o ID para ser mais específico.",
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-                    return
-
-            if not category:
-                await message.reply(
-                    "❌ **Categoria não encontrada**\nVerifique o ID ou nome e tente novamente.",
-                    parse_mode=ParseMode.MARKDOWN
+                # First try exact match (case-insensitive)
+                cat_result = await session.execute(
+                    select(Category).where(Category.name.ilike(search_arg))
                 )
-                return
+                exact_categories = cat_result.scalars().all()
+                
+                if len(exact_categories) == 1:
+                    category = exact_categories[0]
+                elif len(exact_categories) > 1:
+                    # Multiple categories with exactly the same name (different case)
+                    # Just pick the first one
+                    category = exact_categories[0]
+                else:
+                    # If no exact match, search for similar ones to provide suggestions
+                    cat_result = await session.execute(
+                        select(Category).where(Category.name.ilike(f"%{search_arg}%"))
+                    )
+                    similar_categories = cat_result.scalars().all()
+                    
+                    if similar_categories:
+                        similar_cats = "\n".join(f"• ID {c.id}: {c.name}" for c in similar_categories)
+                        await message.reply(
+                            f"❌ **Categoria não encontrada**\n\nNenhuma categoria com o nome exato '{search_arg}' foi encontrada.\n\n"
+                            f"Categorias similares encontradas:\n{similar_cats}\n\n"
+                            "Use o ID para ser mais específico ou o nome exato da categoria.",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    else:
+                        await message.reply(
+                            f"❌ **Categoria não encontrada**\nNenhuma categoria com o nome '{search_arg}' foi encontrada.",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    return
 
             # Buscar grupos da categoria
             group_result = await session.execute(
@@ -192,29 +207,44 @@ async def pokedex_command(message: Message) -> None:
         else:  # type_arg == 'g', busca por grupo
             group = None
             if search_arg.isdigit():
+                # Search by ID (exact)
                 group_id = int(search_arg)
                 group_result = await session.execute(select(Group).where(Group.id == group_id))
                 group = group_result.scalar_one_or_none()
             else:
-                group_result = await session.execute(select(Group).where(Group.name.ilike(f"%{search_arg}%")))
-                found = group_result.scalars().all()
-                if len(found) == 1:
-                    group = found[0]
-                elif len(found) > 1:
-                    similar_groups = "\n".join(f"• ID {g.id}: {g.name}" for g in found)
-                    await message.reply(
-                        f"⚠️ **Múltiplos grupos encontrados com esse nome:**\n\n{similar_groups}\n\n"
-                        "Use o ID para ser mais específico.",
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-                    return
-
-            if not group:
-                await message.reply(
-                    "❌ **Grupo não encontrado**\nVerifique o ID ou nome e tente novamente.",
-                    parse_mode=ParseMode.MARKDOWN
+                # First try exact match (case-insensitive)
+                group_result = await session.execute(
+                    select(Group).where(Group.name.ilike(search_arg))
                 )
-                return
+                exact_groups = group_result.scalars().all()
+                
+                if len(exact_groups) == 1:
+                    group = exact_groups[0]
+                elif len(exact_groups) > 1:
+                    # Multiple groups with exactly the same name (different case)
+                    # Just pick the first one
+                    group = exact_groups[0]
+                else:
+                    # If no exact match, search for similar ones to provide suggestions
+                    group_result = await session.execute(
+                        select(Group).where(Group.name.ilike(f"%{search_arg}%"))
+                    )
+                    similar_groups = group_result.scalars().all()
+                    
+                    if similar_groups:
+                        similar_groups_list = "\n".join(f"• ID {g.id}: {g.name}" for g in similar_groups)
+                        await message.reply(
+                            f"❌ **Grupo não encontrado**\n\nNenhum grupo com o nome exato '{search_arg}' foi encontrado.\n\n"
+                            f"Grupos similares encontrados:\n{similar_groups_list}\n\n"
+                            "Use o ID para ser mais específico ou o nome exato do grupo.",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    else:
+                        await message.reply(
+                            f"❌ **Grupo não encontrado**\nNenhum grupo com o nome '{search_arg}' foi encontrado.",
+                            parse_mode=ParseMode.MARKDOWN
+                        )
+                    return
 
             await show_group_cards(message, group.id, user_id)
 

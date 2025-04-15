@@ -13,14 +13,14 @@ router = Router()
 async def pokebola_command(message: types.Message):
     """
     Handles the /pokebola (or /pb) command.
-    Expects one argument: either card ID or partial card name.
+    Expects one argument: either card ID or exact card name (case-insensitive).
     Fetches the card, then sends its image and attributes.
     """
     # Parse arguments
     text_parts = message.text.split(maxsplit=1)
     if len(text_parts) < 2:
         await message.reply(
-            "❗ **Erro:** Forneça o ID ou nome do card. Exemplo:\n"
+            "❗ **Erro:** Forneça o ID ou nome exato do card. Exemplo:\n"
             "`/pokebola 42` ou `/pokebola Pikachu`",
             parse_mode=ParseMode.MARKDOWN
         )
@@ -32,6 +32,7 @@ async def pokebola_command(message: types.Message):
         # Query the card by ID or name with eager loading
         card = None
         if args.isdigit():
+            # Search by ID (exact)
             card_id = int(args)
             result = await session.execute(
                 select(Card)
@@ -44,31 +45,54 @@ async def pokebola_command(message: types.Message):
             # Call unique() to remove duplicates from joined eager loads
             card = result.unique().scalar_one_or_none()
         else:
+            # First try exact match (case-insensitive)
             result = await session.execute(
                 select(Card)
                 .options(
-                    joinedload(Card.group).joinedload(Group.category),  # Eager load group and category
-                    joinedload(Card.tags)  # Eager load tags
+                    joinedload(Card.group).joinedload(Group.category),
+                    joinedload(Card.tags)
                 )
-                .where(Card.name.ilike(f"%{args}%"))
+                .where(Card.name.ilike(args))  # Exact match, case-insensitive
             )
-            # Call unique() before extracting scalars
-            cards = result.unique().scalars().all()
-
-            if len(cards) == 0:
-                await message.reply(
-                    "❌ **Erro:** Nenhum card encontrado com o ID ou nome fornecido.",
-                    parse_mode=ParseMode.MARKDOWN
+            cards_exact = result.unique().scalars().all()
+            
+            if len(cards_exact) == 1:
+                card = cards_exact[0]
+            elif len(cards_exact) > 1:
+                # Multiple cards with exactly the same name (different case)
+                # Just pick the first one since they're considered the same
+                card = cards_exact[0]
+            else:
+                # If no exact match, try partial match to provide helpful suggestions
+                result = await session.execute(
+                    select(Card)
+                    .options(
+                        joinedload(Card.group).joinedload(Group.category),
+                        joinedload(Card.tags)
+                    )
+                    .where(Card.name.ilike(f"%{args}%"))
                 )
+                similar_cards = result.unique().scalars().all()
+                
+                if similar_cards:
+                    # Show suggestions if we found similar cards
+                    similar_cards_list = "\n".join([f"• {c.id}. {c.name}" for c in similar_cards[:5]])
+                    suggestion_text = f"Cards similares encontrados:\n{similar_cards_list}"
+                    if len(similar_cards) > 5:
+                        suggestion_text += f"\n...e {len(similar_cards) - 5} mais."
+                    
+                    await message.reply(
+                        f"❌ **Erro:** Nenhum card com o nome exato '{args}' foi encontrado.\n\n"
+                        f"{suggestion_text}\n\n"
+                        "Por favor, use o ID exato do card ou escreva o nome completo.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                else:
+                    await message.reply(
+                        f"❌ **Erro:** Nenhum card encontrado com o nome '{args}'.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
                 return
-            elif len(cards) > 1:
-                await message.reply(
-                    "⚠️ **Erro:** Mais de um card encontrado com um nome similar. Tente utilizar o ID.",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                return
-
-            card = cards[0]
 
         if not card:
             await message.reply(
