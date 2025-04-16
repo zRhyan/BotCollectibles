@@ -9,7 +9,7 @@ from database.models import Inventory, Card, Group, Category, User
 
 router = Router()
 
-# Novo padrão para callback: mochila_page_{page}_user_{user_id}
+# Novo padrão para callback: mochila_page_{page}_user_{user_id}.
 MOCHILA_CALLBACK_PREFIX = "mochila_page"
 
 @router.message(Command(commands=["mochila"], ignore_case=True, ignore_mention=True))
