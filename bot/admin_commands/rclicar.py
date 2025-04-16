@@ -148,10 +148,13 @@ async def reset_pokeballs_command(message: types.Message):
                     return
                 
                 # Valor atual para confirmação
-                pokeballs_before = user.pokeballs
+                pokeballs_before = user.pokeballs or 0
                 
                 # Atualizar e confirmar
-                user.pokeballs += quantity
+                if user.pokeballs is None:
+                    user.pokeballs = quantity
+                else:
+                    user.pokeballs += quantity
                 await session.commit()
                 
                 # Log da operação
