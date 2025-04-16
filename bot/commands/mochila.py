@@ -62,7 +62,7 @@ async def mochila_command(message: Message, command: CommandObject):
     # Enviar a mensagem da carta favorita separadamente
     if fav_card and fav_card.image_file_id:
         fav_text = (
-            f"{target_user.fav_emoji or ''} {fav_card.id}. {fav_card.name}\n"
+            f"{target_user.fav_emoji or ''} `{fav_card.id}`. {fav_card.name}\n"
             f"Raridade: {fav_card.rarity}\n\n"
             f"👤 @{target_user.nickname or target_user.username or 'Usuário'}"
         )
@@ -116,7 +116,7 @@ async def send_mochila_page(
 
     lines = []
     for i, (inv, card, group, category) in enumerate(page_items, start=start_index + 1):
-        line = f"{card.rarity}{card.id}. {card.name} ({inv.quantity}x)"
+        line = f"{card.rarity}`{card.id}`. {card.name} ({inv.quantity}x)"
         lines.append(line)
 
     inventory_text = "\n".join(lines)

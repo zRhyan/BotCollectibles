@@ -158,11 +158,16 @@ async def pokebola_command(message: types.Message):
                     parse_mode=ParseMode.MARKDOWN
                 )
             except Exception as e:
-                # If the error is due to a document being sent as a photo, convert it
-                if "can't use file of type Document as Photo" in str(e):
+                error_msg = str(e).lower()
+                # Tratamento mais robusto para diferentes tipos de erro
+                if "can't use file" in error_msg or "wrong file id" in error_msg or "file is too big" in error_msg:
                     try:
-                        # Convert document to photo and get new file_id
-                        new_photo_id = await ensure_photo_file_id(message.bot, types.Document(file_id=card.image_file_id))
+                        # Tentar converter e limitar o tamanho da imagem
+                        new_photo_id = await ensure_photo_file_id(
+                            message.bot, 
+                            types.Document(file_id=card.image_file_id),
+                            force_aspect_ratio=True
+                        )
                         
                         # Update the card in database with new photo file_id
                         await session.execute(
@@ -172,21 +177,35 @@ async def pokebola_command(message: types.Message):
                         )
                         await session.commit()
                         
-                        # Send the converted photo
+                        # Try to send the converted photo
                         await message.answer_photo(
                             photo=new_photo_id,
                             caption=caption,
                             parse_mode=ParseMode.MARKDOWN
                         )
-                    except Exception as conv_error:
-                        # Fallback to document if conversion fails
-                        await message.answer_document(
-                            document=card.image_file_id,
-                            caption=caption,
-                            parse_mode=ParseMode.MARKDOWN
-                        )
+                    except Exception:
+                        # Se falhar na conversão, tentar enviar como documento
+                        try:
+                            await message.answer_document(
+                                document=card.image_file_id,
+                                caption=caption,
+                                parse_mode=ParseMode.MARKDOWN
+                            )
+                        except Exception:
+                            # Se ainda falhar, marcar o arquivo como inválido e enviar apenas o texto
+                            await session.execute(
+                                update(Card)
+                                .where(Card.id == card.id)
+                                .values(image_file_id="")
+                            )
+                            await session.commit()
+                            
+                            await message.reply(
+                                caption + "\n\n⚠️ *Não foi possível exibir a imagem deste card.*",
+                                parse_mode=ParseMode.MARKDOWN
+                            )
                 else:
-                    # Fallback to text for any other error
+                    # Para outros tipos de erro, apenas enviar o texto
                     await message.reply(
                         caption,
                         parse_mode=ParseMode.MARKDOWN

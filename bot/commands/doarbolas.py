@@ -114,30 +114,43 @@ async def confirm_poke_donation(callback: types.CallbackQuery):
     nickname = parts[3]
     donor_id = callback.from_user.id
 
-    async with get_session() as session:
-        # Fetch donor and recipient.
-        donor_result = await session.execute(select(User).where(User.id == donor_id))
-        donor = donor_result.scalar_one_or_none()
-        recipient_result = await session.execute(select(User).where(User.nickname == nickname))
-        recipient = recipient_result.scalar_one_or_none()
+    try:
+        async with get_session() as session:
+            # Fetch donor and recipient com uma única operação para evitar condições de corrida
+            donor_result = await session.execute(select(User).where(User.id == donor_id))
+            donor = donor_result.scalar_one_or_none()
+            recipient_result = await session.execute(select(User).where(User.nickname == nickname))
+            recipient = recipient_result.scalar_one_or_none()
 
-        if not donor or not recipient:
-            await callback.answer("Usuário não encontrado.", show_alert=True)
-            return
+            # Validações completas antes de qualquer modificação
+            if not donor or not recipient:
+                await callback.answer("Usuário não encontrado.", show_alert=True)
+                return
 
-        if donor.pokeballs < donation_quantity:
-            await callback.answer("Você não tem pokébolas suficientes.", show_alert=True)
-            return
+            if donor.pokeballs < donation_quantity:
+                await callback.answer("Você não tem pokébolas suficientes.", show_alert=True)
+                return
 
-        donor.pokeballs -= donation_quantity
-        recipient.pokeballs += donation_quantity
-        await session.commit()
+            # Transferência atômica das pokebolas
+            donor.pokeballs -= donation_quantity
+            recipient.pokeballs += donation_quantity
+            await session.commit()
 
-    await callback.message.edit_text(
-        f"✅ Doação concluída! Você doou {donation_quantity} pokébolas para {nickname}.",
-        parse_mode=ParseMode.MARKDOWN
-    )
-    await callback.answer("Doação realizada com sucesso!", show_alert=True)
+        # Feedback para o usuário após operação bem-sucedida
+        await callback.message.edit_text(
+            f"✅ Doação concluída! Você doou {donation_quantity} pokébolas para {nickname}.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        await callback.answer("Doação realizada com sucesso!", show_alert=True)
+        
+    except Exception as e:
+        # Tratamento de erro durante a transferência
+        await callback.message.edit_text(
+            "❌ **Erro:** Ocorreu um problema durante a doação. Tente novamente mais tarde.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        await callback.answer("Erro durante a doação.", show_alert=True)
+        # Idealmente, aqui você faria log do erro para depuração
 
 @router.callback_query(lambda call: call.data == "cancel_donation")
 async def cancel_donation(callback: types.CallbackQuery):

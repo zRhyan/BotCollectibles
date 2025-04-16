@@ -257,16 +257,32 @@ async def donation_confirm(callback: CallbackQuery, state: FSMContext) -> None:
 
         elif donate_type == "specific":
             donations = data.get("donations", [])
+            
+            # Primeiro, verificamos se o usuário possui TODOS os cards necessários
+            # antes de fazer qualquer alteração no banco de dados
+            invalid_donations = []
             for card_id, quantity in donations:
                 donor_inv = next((inv for inv in donor.inventory if inv.card_id == card_id), None)
                 if not donor_inv or donor_inv.quantity < quantity:
-                    await callback.answer(
-                        f"Você não possui quantidade suficiente do card ID {card_id}.",
-                        show_alert=True
-                    )
-                    # We do not return here, so other cards can still be processed
-                    continue
-
+                    invalid_donations.append((card_id, quantity))
+            
+            # Se houver algum card inválido, não realizamos nenhuma doação
+            if invalid_donations:
+                invalid_list = ", ".join([f"ID {card_id} (x{quantity})" 
+                                        for card_id, quantity in invalid_donations])
+                await callback.message.edit_text(
+                    f"❌ **Doação cancelada!** Você não possui quantidade suficiente dos seguintes cards:\n"
+                    f"`{invalid_list}`",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                await callback.answer("Doação cancelada: cards insuficientes", show_alert=True)
+                await state.clear()
+                return
+            
+            # Somente prossegue com a doação se todos os cards forem válidos
+            for card_id, quantity in donations:
+                donor_inv = next((inv for inv in donor.inventory if inv.card_id == card_id), None)
+                # A este ponto sabemos que o donor_inv existe e tem quantidade suficiente
                 donor_inv.quantity -= quantity
 
                 rec_inv_result = await session.execute(
@@ -286,6 +302,7 @@ async def donation_confirm(callback: CallbackQuery, state: FSMContext) -> None:
                     )
                     session.add(new_inv)
 
+            # Confirma todas as alterações apenas se todas as validações passaram
             await session.commit()
 
             await callback.message.edit_text(

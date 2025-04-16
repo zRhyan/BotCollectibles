@@ -1,6 +1,7 @@
 # commands/capturar.py
 
 import random
+import time
 from aiogram import Router, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
@@ -12,6 +13,13 @@ from database.models import User, Card, Inventory, Category, Group
 from utils.image_utils import ensure_photo_file_id
 
 router = Router()
+
+# Dicionário para rastrear usuários em processo de captura
+# Formato: {user_id: timestamp}
+active_captures = {}
+
+# Tempo máximo (em segundos) que um usuário pode ficar no estado de captura
+CAPTURE_TIMEOUT = 300  # 5 minutos
 
 @router.message(Command(commands=["cap", "capturar"]))
 async def capturar_command(message: types.Message):
@@ -29,6 +37,23 @@ async def capturar_command(message: types.Message):
         return
 
     user_id = message.from_user.id
+    current_time = time.time()
+    
+    # Limpar capturas antigas antes de verificar
+    # Isso ajuda a resolver problemas de usuários "travados"
+    for uid in list(active_captures.keys()):
+        if current_time - active_captures[uid] > CAPTURE_TIMEOUT:
+            del active_captures[uid]
+    
+    # Verificar se o usuário já está em processo de captura
+    if user_id in active_captures:
+        await message.reply(
+            "⚠️ **Você já tem um processo de captura em andamento!**\n"
+            "Complete sua captura atual ou aguarde alguns minutos antes de tentar novamente.\n"
+            "Se o problema persistir, tente novamente em 5 minutos.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
 
     async with get_session() as session:
         # 1) Check if user exists
@@ -59,6 +84,9 @@ async def capturar_command(message: types.Message):
                 parse_mode=ParseMode.MARKDOWN
             )
             return
+            
+        # Marcar usuário como em processo de captura com timestamp atual
+        active_captures[user_id] = current_time
 
         # Build inline keyboard with user-specific callback data
         keyboard = InlineKeyboardBuilder()
@@ -155,6 +183,11 @@ async def handle_category_choice(callback: CallbackQuery):
                 keyboard.adjust(2)
         keyboard.adjust(2)
 
+        # Verificar se o usuário ainda está no timeout ativo após verificação de dados
+        if user_id not in active_captures:
+            await callback.answer("Sua sessão de captura expirou. Inicie uma nova captura.", show_alert=True)
+            return
+
         await callback.message.edit_text(
             text="Selecione um grupo para tentar capturar:",
             reply_markup=keyboard.as_markup(),
@@ -180,6 +213,8 @@ async def handle_group_choice(callback: CallbackQuery):
         return
 
     expected_user_id = int(data_parts[2])
+    user_id = expected_user_id
+    
     if callback.from_user.id != expected_user_id:
         await callback.answer("Você não pode usar este botão.", show_alert=True)
         return
@@ -280,6 +315,10 @@ async def handle_group_choice(callback: CallbackQuery):
             f"🎒Pokébolas restantes: {user.pokeballs}"
         )
 
+        # Limpar o estado de captura do usuário no final do processo
+        if user_id in active_captures:
+            del active_captures[user_id]
+
         # Handle the card's image properly
         if card.image_file_id:
             try:
@@ -326,3 +365,8 @@ async def handle_group_choice(callback: CallbackQuery):
                 caption,
                 parse_mode=ParseMode.MARKDOWN
             )
+
+# Adicionar função para limpar estados de captura sem atividade (opcional - pode ser implementado futuramente)
+# Esta função poderia ser chamada periodicamente por um scheduler para limpar capturas abandonadas
+async def clear_abandoned_captures():
+    active_captures.clear()
