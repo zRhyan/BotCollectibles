@@ -9,24 +9,47 @@ from bot.utils.image_utils import ensure_photo_file_id
 
 router = Router()
 
+def parse_pokebola_argument(text: str) -> str:
+    """
+    Parse the /pokebola command argument, handling quoted strings properly.
+    Examples:
+    '/pokebola 42' -> '42'
+    '/pokebola "Pikachu"' -> 'Pikachu'
+    """
+    command_parts = text.split(maxsplit=1)
+    if len(command_parts) < 2:
+        return None
+    
+    arg = command_parts[1].strip()
+    
+    # Handle quoted search argument
+    if arg.startswith('"') and arg.endswith('"'):
+        # Remove surrounding quotes
+        arg = arg[1:-1].strip()
+    elif arg.startswith("'") and arg.endswith("'"):
+        # Also handle single quotes
+        arg = arg[1:-1].strip()
+    
+    return arg
+
 @router.message(Command(commands=["pokebola", "pb"]))
 async def pokebola_command(message: types.Message):
     """
     Handles the /pokebola (or /pb) command.
     Expects one argument: either card ID or exact card name (case-insensitive).
+    For names with spaces, use quotes: /pokebola "Pikachu EX"
     Fetches the card, then sends its image and attributes.
     """
-    # Parse arguments
-    text_parts = message.text.split(maxsplit=1)
-    if len(text_parts) < 2:
+    # Parse arguments with better handling of quoted strings
+    args = parse_pokebola_argument(message.text)
+    if args is None:
         await message.reply(
-            "❗ **Erro:** Forneça o ID ou nome exato do card. Exemplo:\n"
-            "`/pokebola 42` ou `/pokebola Pikachu`",
+            "❗ **Erro:** Forneça o ID ou nome exato do card. Exemplos:\n"
+            "• `/pokebola 42` - busca pelo ID\n"
+            "• `/pokebola \"Pikachu\"` - busca pelo nome exato (use aspas para nomes com espaços)",
             parse_mode=ParseMode.MARKDOWN
         )
         return
-
-    args = text_parts[1].strip()
 
     async with get_session() as session:
         # Query the card by ID or name with eager loading

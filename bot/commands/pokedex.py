@@ -95,24 +95,60 @@ HELP_MESSAGE = """
 
 🔍 Buscar uma categoria específica:
 • `/pokedex c ID` - busca por ID
-• `/pokedex c Nome` - busca pelo nome exato (não sensível a maiúsculas/minúsculas)
+• `/pokedex c "Nome da Categoria"` - busca pelo nome exato (use aspas para nomes com espaços)
 
 🎴 Buscar um grupo específico:
 • `/pokedex g ID` - busca por ID
-• `/pokedex g Nome` - busca pelo nome exato (não sensível a maiúsculas/minúsculas)
+• `/pokedex g "Nome do Grupo"` - busca pelo nome exato (use aspas para nomes com espaços)
 
 Exemplo:
 • `/pokedex c 1`
-• `/pokedex g Pokemon`
+• `/pokedex g "Pokemon Red"`
+• `/pokedex c "K-Pop Idols"`
 """
+
+def parse_command_arguments(text: str) -> tuple[str, str]:
+    """
+    Parse command arguments handling quoted strings properly.
+    Returns a tuple of (type_arg, search_arg)
+    
+    Examples:
+    '/pokedex c 1' -> ('c', '1')
+    '/pokedex g "BTS DISCO"' -> ('g', 'BTS DISCO')
+    """
+    command_parts = text.split(maxsplit=1)
+    if len(command_parts) < 2:
+        return None, None
+    
+    args_text = command_parts[1].strip()
+    
+    # Split by first space to get type_arg
+    if ' ' not in args_text:
+        return args_text.lower(), None
+    
+    type_arg, remaining = args_text.split(maxsplit=1)
+    type_arg = type_arg.lower()
+    
+    # Handle quoted search argument
+    search_arg = remaining.strip()
+    if search_arg.startswith('"') and search_arg.endswith('"'):
+        # Remove surrounding quotes
+        search_arg = search_arg[1:-1].strip()
+    elif search_arg.startswith("'") and search_arg.endswith("'"):
+        # Also handle single quotes
+        search_arg = search_arg[1:-1].strip()
+    
+    return type_arg, search_arg
 
 @router.message(Command(commands=["pokedex", "pd"]))
 async def pokedex_command(message: Message) -> None:
     user_id = message.from_user.id
-    parts = message.text.split(maxsplit=2)
+    
+    # Parse arguments with better handling of quoted strings
+    type_arg, search_arg = parse_command_arguments(message.text)
     
     # Sem argumentos: mostrar categorias
-    if len(parts) == 1:
+    if type_arg is None:
         async with get_session() as session:
             categories_result = await session.execute(
                 select(Category).options(selectinload(Category.groups))
@@ -128,12 +164,9 @@ async def pokedex_command(message: Message) -> None:
         return
 
     # Comando com argumentos incorretos
-    if len(parts) != 3 or parts[1].lower() not in ['c', 'g']:
+    if type_arg not in ['c', 'g'] or search_arg is None:
         await message.answer(HELP_MESSAGE, parse_mode=ParseMode.MARKDOWN)
         return
-
-    type_arg = parts[1].lower()
-    search_arg = parts[2]
 
     async with get_session() as session:
         if type_arg == 'c':  # Busca por categoria
@@ -167,17 +200,18 @@ async def pokedex_command(message: Message) -> None:
                     if similar_categories:
                         # Organiza os resultados similares por comprimento do nome
                         similar_categories.sort(key=lambda x: abs(len(x.name) - len(search_arg)))
-                        similar_cats = "\n".join(f"• ID {c.id}: {c.name}" for c in similar_categories[:5])
+                        similar_cats = "\n".join(f'• ID {c.id}: "{c.name}"' for c in similar_categories[:5])
                         await message.reply(
-                            f"❌ **Categoria não encontrada**\n\n"
-                            f"Não encontrei uma categoria com exatamente o nome '{search_arg}'.\n\n"
-                            f"Você quis dizer:\n{similar_cats}\n\n"
-                            "💡 Use o ID da categoria ou digite o nome exatamente como mostrado acima.",
+                            f'❌ **Categoria não encontrada**\n\n'
+                            f'Não encontrei uma categoria com exatamente o nome "{search_arg}".\n\n'
+                            f'Você quis dizer:\n{similar_cats}\n\n'
+                            'Use aspas para nomes compostos. Exemplo: `/pokedex c "Nome Composto"`\n'
+                            'Ou use o ID para ser mais específico.',
                             parse_mode=ParseMode.MARKDOWN
                         )
                     else:
                         await message.reply(
-                            f"❌ **Categoria não encontrada**\nNenhuma categoria com o nome '{search_arg}' foi encontrada.",
+                            f'❌ **Categoria não encontrada**\nNenhuma categoria com o nome "{search_arg}" foi encontrada.',
                             parse_mode=ParseMode.MARKDOWN
                         )
                     return
@@ -239,17 +273,18 @@ async def pokedex_command(message: Message) -> None:
                     if similar_groups:
                         # Organiza os resultados similares por comprimento do nome (mais próximo primeiro)
                         similar_groups.sort(key=lambda x: abs(len(x.name) - len(search_arg)))
-                        similar_groups_list = "\n".join(f"• ID {g.id}: {g.name}" for g in similar_groups[:5])
+                        similar_groups_list = "\n".join(f'• ID {g.id}: "{g.name}"' for g in similar_groups[:5])
                         await message.reply(
-                            f"❌ **Grupo não encontrado**\n\n"
-                            f"Não encontrei um grupo com exatamente o nome '{search_arg}'.\n\n"
-                            f"Você quis dizer:\n{similar_groups_list}\n\n"
-                            "💡 Use o ID do grupo ou digite o nome exatamente como mostrado acima.",
+                            f'❌ **Grupo não encontrado**\n\n'
+                            f'Não encontrei um grupo com exatamente o nome "{search_arg}".\n\n'
+                            f'Você quis dizer:\n{similar_groups_list}\n\n'
+                            'Use aspas para nomes compostos. Exemplo: `/pokedex g "Nome Composto"`\n'
+                            'Ou use o ID para ser mais específico.',
                             parse_mode=ParseMode.MARKDOWN
                         )
                     else:
                         await message.reply(
-                            f"❌ **Grupo não encontrado**\nNenhum grupo com o nome '{search_arg}' foi encontrado.",
+                            f'❌ **Grupo não encontrado**\nNenhum grupo com o nome "{search_arg}" foi encontrado.',
                             parse_mode=ParseMode.MARKDOWN
                         )
                     return
