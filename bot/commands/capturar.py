@@ -6,9 +6,10 @@ from aiogram.filters import Command
 from aiogram.enums import ParseMode
 from aiogram.types import InputMediaPhoto, InputMediaDocument, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from sqlalchemy import select, func
+from sqlalchemy import select, func, update  # Adicionado 'update' aqui
 from database.session import get_session
 from database.models import User, Card, Inventory, Category, Group
+from utils.image_utils import ensure_photo_file_id
 
 router = Router()
 
@@ -282,32 +283,43 @@ async def handle_group_choice(callback: CallbackQuery):
         # Handle the card's image properly
         if card.image_file_id:
             try:
-                # First, try sending as a photo
+                # Ensure image has correct aspect ratio
+                photo_id = card.image_file_id
+                try:
+                    # Try to convert and fix aspect ratio if needed
+                    photo_id = await ensure_photo_file_id(
+                        callback.bot, 
+                        types.Document(file_id=card.image_file_id),
+                        force_aspect_ratio=True
+                    )
+                    
+                    # Update card's file_id if it changed
+                    if photo_id != card.image_file_id:
+                        await session.execute(
+                            update(Card)
+                            .where(Card.id == card.id)
+                            .values(image_file_id=photo_id)
+                        )
+                        await session.commit()
+                except Exception:
+                    # If conversion fails, use original file_id
+                    pass
+                
+                # Send the image
                 await callback.message.edit_media(
                     media=InputMediaPhoto(
-                        media=card.image_file_id,
+                        media=photo_id,
                         caption=caption,
                         parse_mode=ParseMode.MARKDOWN
                     ),
                     reply_markup=None
                 )
             except Exception as e:
-                # If the error is due to a document being sent as a photo, send as document
-                if "can't use file of type Document as Photo" in str(e):
-                    await callback.message.edit_media(
-                        media=InputMediaDocument(
-                            media=card.image_file_id,
-                            caption=caption,
-                            parse_mode=ParseMode.MARKDOWN
-                        ),
-                        reply_markup=None
-                    )
-                else:
-                    # Fallback to text for any other error
-                    await callback.message.edit_text(
-                        caption,
-                        parse_mode=ParseMode.MARKDOWN
-                    )
+                # Fallback for any errors
+                await callback.message.edit_text(
+                    caption,
+                    parse_mode=ParseMode.MARKDOWN
+                )
         else:
             # Fallback to text if no image is available
             await callback.message.edit_text(
