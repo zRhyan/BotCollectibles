@@ -144,31 +144,35 @@ async def pokedex_command(message: Message) -> None:
                 cat_result = await session.execute(select(Category).where(Category.id == cat_id))
                 category = cat_result.scalar_one_or_none()
             else:
-                # First try exact match (case-insensitive)
+                # Try exact match (case-insensitive) using func.lower
+                from sqlalchemy import func
+                search_lower = search_arg.lower()
                 cat_result = await session.execute(
-                    select(Category).where(Category.name.ilike(search_arg))
+                    select(Category).where(func.lower(Category.name) == search_lower)
                 )
                 exact_categories = cat_result.scalars().all()
                 
                 if len(exact_categories) == 1:
                     category = exact_categories[0]
                 elif len(exact_categories) > 1:
-                    # Multiple categories with exactly the same name (different case)
-                    # Just pick the first one
+                    # No improvável caso de categorias com mesmo nome
                     category = exact_categories[0]
                 else:
-                    # If no exact match, search for similar ones to provide suggestions
+                    # Se não encontrar correspondência exata, procura similares
                     cat_result = await session.execute(
-                        select(Category).where(Category.name.ilike(f"%{search_arg}%"))
+                        select(Category).where(func.lower(Category.name).like(f"%{search_lower}%"))
                     )
                     similar_categories = cat_result.scalars().all()
                     
                     if similar_categories:
-                        similar_cats = "\n".join(f"• ID {c.id}: {c.name}" for c in similar_categories)
+                        # Organiza os resultados similares por comprimento do nome
+                        similar_categories.sort(key=lambda x: abs(len(x.name) - len(search_arg)))
+                        similar_cats = "\n".join(f"• ID {c.id}: {c.name}" for c in similar_categories[:5])
                         await message.reply(
-                            f"❌ **Categoria não encontrada**\n\nNenhuma categoria com o nome exato '{search_arg}' foi encontrada.\n\n"
-                            f"Categorias similares encontradas:\n{similar_cats}\n\n"
-                            "Use o ID para ser mais específico ou o nome exato da categoria.",
+                            f"❌ **Categoria não encontrada**\n\n"
+                            f"Não encontrei uma categoria com exatamente o nome '{search_arg}'.\n\n"
+                            f"Você quis dizer:\n{similar_cats}\n\n"
+                            "💡 Use o ID da categoria ou digite o nome exatamente como mostrado acima.",
                             parse_mode=ParseMode.MARKDOWN
                         )
                     else:
@@ -212,31 +216,35 @@ async def pokedex_command(message: Message) -> None:
                 group_result = await session.execute(select(Group).where(Group.id == group_id))
                 group = group_result.scalar_one_or_none()
             else:
-                # First try exact match (case-insensitive)
+                # Try exact match (case-insensitive) using func.lower for exact comparison
+                from sqlalchemy import func
+                search_lower = search_arg.lower()
                 group_result = await session.execute(
-                    select(Group).where(Group.name.ilike(search_arg))
+                    select(Group).where(func.lower(Group.name) == search_lower)
                 )
                 exact_groups = group_result.scalars().all()
                 
                 if len(exact_groups) == 1:
                     group = exact_groups[0]
                 elif len(exact_groups) > 1:
-                    # Multiple groups with exactly the same name (different case)
-                    # Just pick the first one
+                    # No conflito improvável de grupos com mesmo nome
                     group = exact_groups[0]
                 else:
-                    # If no exact match, search for similar ones to provide suggestions
+                    # Se não encontrar correspondência exata, procura similares
                     group_result = await session.execute(
-                        select(Group).where(Group.name.ilike(f"%{search_arg}%"))
+                        select(Group).where(func.lower(Group.name).like(f"%{search_lower}%"))
                     )
                     similar_groups = group_result.scalars().all()
                     
                     if similar_groups:
-                        similar_groups_list = "\n".join(f"• ID {g.id}: {g.name}" for g in similar_groups)
+                        # Organiza os resultados similares por comprimento do nome (mais próximo primeiro)
+                        similar_groups.sort(key=lambda x: abs(len(x.name) - len(search_arg)))
+                        similar_groups_list = "\n".join(f"• ID {g.id}: {g.name}" for g in similar_groups[:5])
                         await message.reply(
-                            f"❌ **Grupo não encontrado**\n\nNenhum grupo com o nome exato '{search_arg}' foi encontrado.\n\n"
-                            f"Grupos similares encontrados:\n{similar_groups_list}\n\n"
-                            "Use o ID para ser mais específico ou o nome exato do grupo.",
+                            f"❌ **Grupo não encontrado**\n\n"
+                            f"Não encontrei um grupo com exatamente o nome '{search_arg}'.\n\n"
+                            f"Você quis dizer:\n{similar_groups_list}\n\n"
+                            "💡 Use o ID do grupo ou digite o nome exatamente como mostrado acima.",
                             parse_mode=ParseMode.MARKDOWN
                         )
                     else:
