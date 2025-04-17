@@ -35,6 +35,7 @@ from admin_commands.addcarta import router as addcarta_router
 from admin_commands.rclicar import router as rclicar_router
 from admin_commands.rcoins import router as rcoins_router
 from admin_commands.imgpd import router as imgpd_router
+from admin_commands.checkduplicates import router as checkduplicates_router
 
 # Import the database 
 from database.models import Base
@@ -109,7 +110,7 @@ dp.include_router(doarcoins_router)
 dp.include_router(venderc_router) #Before pokemart. If it work I'm a happy man.
 dp.include_router(roubar_router)
 dp.include_router(pokemart_router)
-
+dp.include_router(checkduplicates_router)
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))

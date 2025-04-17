@@ -23,7 +23,7 @@ async def add_card(message: types.Message):
     # Check if the user is an admin
     async with get_session() as session:
         result = await session.execute(select(User).where(User.id == message.from_user.id))
-        user = result.scalar_one_or_none()
+        user = result.scalars().first()  # Alterado scalar_one_or_none() para scalars().first()
 
         if not user or user.is_admin == 0:
             await message.reply(
@@ -111,7 +111,7 @@ async def add_card(message: types.Message):
             try:
                 # Ensure the category exists
                 result = await session.execute(select(Category).where(Category.name == category_name))
-                category = result.scalar_one_or_none()
+                category = result.scalars().first()  # Alterado scalar_one_or_none() para scalars().first()
                 if not category:
                     category = Category(name=category_name)
                     session.add(category)
@@ -119,7 +119,7 @@ async def add_card(message: types.Message):
 
                 # Ensure the group exists
                 result = await session.execute(select(Group).where(Group.name == group_name, Group.category_id == category.id))
-                group = result.scalar_one_or_none()
+                group = result.scalars().first()  # Alterado scalar_one_or_none() para scalars().first()
                 if not group:
                     group = Group(name=group_name, category_id=category.id)
                     session.add(group)
@@ -129,7 +129,7 @@ async def add_card(message: types.Message):
                 tag = None
                 if tag_name:
                     result = await session.execute(select(Tag).where(Tag.name == tag_name))
-                    tag = result.scalar_one_or_none()
+                    tag = result.scalars().first()  # Alterado scalar_one_or_none() para scalars().first()
                     if not tag:
                         tag = Tag(name=tag_name)
                         session.add(tag)
@@ -137,7 +137,8 @@ async def add_card(message: types.Message):
 
                 # Check if the card already exists
                 result = await session.execute(select(Card).where(Card.name == card_name))
-                if result.scalar_one_or_none():
+                existing_card = result.scalars().first()  # Alterado scalar_one_or_none() para scalars().first()
+                if existing_card:
                     await message.reply(
                         "❌ **Erro:** Um card com este nome já existe no sistema.",
                         parse_mode=ParseMode.MARKDOWN
