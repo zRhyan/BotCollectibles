@@ -17,8 +17,9 @@ ADMIN_CHAT_ID = 1686075980  # ID correspondente ao @zRhYaN
 async def ensure_photo_file_id(
     bot: Bot, 
     content: Union[Document, PhotoSize, str], 
-    user_id: int, 
-    force_aspect_ratio: bool = True
+    user_id: int,
+    force_aspect_ratio: bool = True,
+    mode: str = "lookup"
 ) -> str:
     """
     Garante que um documento ou file_id seja convertido para photo com proporção 3:4.
@@ -28,6 +29,8 @@ async def ensure_photo_file_id(
         content: Documento, PhotoSize, ou file_id para converter
         user_id: ID do usuário para enviar a foto temporária e obter novo file_id
         force_aspect_ratio: Se True, força proporção 3:4
+        mode: "input" quando o conteúdo vem diretamente de uma mensagem do usuário,
+              "lookup" quando é apenas o file_id existente no banco sem mensagem associada
         
     Returns:
         str: File ID da foto processada com proporção correta
@@ -63,6 +66,26 @@ async def ensure_photo_file_id(
         if is_already_photo and not force_aspect_ratio:
             return file_id
         
+        # Se já é uma foto e proporção já está correta, retornamos o original
+        if is_already_photo:
+            # Verificar proporção atual
+            try:
+                file = await bot.get_file(file_id)
+                file_content = await bot.download_file(file.file_path)
+                
+                # Abrir a imagem com PIL
+                img = Image.open(io.BytesIO(file_content))
+                current_ratio = img.width / img.height
+                target_ratio = 3/4
+                
+                # Se a proporção já está próxima de 3:4, não precisamos ajustar
+                if abs(current_ratio - target_ratio) <= 0.1:
+                    return file_id
+            except Exception as e:
+                logger.warning(f"Erro ao verificar proporção de imagem: {str(e)}")
+                # Em caso de erro, retornamos o file_id original
+                return file_id
+        
         # Baixar o arquivo
         file = await bot.get_file(file_id)
         file_content = await bot.download_file(file.file_path)
@@ -77,10 +100,6 @@ async def ensure_photo_file_id(
         # Calcular dimensões alvo para proporção 3:4
         current_ratio = img.width / img.height
         target_ratio = 3/4
-        
-        # Se a proporção já está correta (ou próxima) e já é foto, retornar o file_id original
-        if is_already_photo and abs(current_ratio - target_ratio) <= 0.01:
-            return file_id
         
         logger.info(f"Ajustando proporção da imagem para 3:4. Proporção atual: {current_ratio}")
         
@@ -104,10 +123,16 @@ async def ensure_photo_file_id(
             img.save(temp_path, format='JPEG', quality=95)
         
         try:
-            # Enviar para o usuário e obter novo file_id
+            # Enviar para o usuário (especificado por user_id) e obter novo file_id
             logger.info(f"Enviando imagem processada para usuário {user_id} para obter file_id")
             
-            caption = "🔄 Processando imagem..." if not is_already_photo else None
+            # Diferentes mensagens baseadas no modo
+            caption = None
+            if mode == "input":
+                # No modo input, o usuário está enviando a imagem diretamente
+                caption = "🔄 Processando imagem..."
+            
+            # Enviar a foto
             result = await bot.send_photo(
                 chat_id=user_id,
                 photo=FSInputFile(temp_path),
@@ -120,8 +145,9 @@ async def ensure_photo_file_id(
                 new_file_id = result.photo[-1].file_id
                 logger.info(f"Novo file_id obtido com sucesso: {new_file_id[:10]}...")
             
-            # Apagar mensagem temporária se não era foto originalmente
-            if not is_already_photo and result:
+            # Apagar mensagem temporária apenas no modo lookup
+            # (no modo input, mantemos para mostrar ao usuário)
+            if mode == "lookup" and result:
                 try:
                     await bot.delete_message(chat_id=user_id, message_id=result.message_id)
                     logger.info("Mensagem temporária removida")

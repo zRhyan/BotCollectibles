@@ -36,7 +36,6 @@ from admin_commands.rclicar import router as rclicar_router
 from admin_commands.rcoins import router as rcoins_router
 from admin_commands.imgpd import router as imgpd_router
 from admin_commands.checkduplicates import router as checkduplicates_router
-from admin_commands.convert_images import router as convert_images_router
 
 # Import the database 
 from database.models import Base
@@ -94,7 +93,6 @@ dp.include_router(jornada_router)
 dp.include_router(pokedex_router)
 dp.include_router(mochila_router)
 dp.include_router(pokebanco_router)
-dp.include_router(convert_images_router)
 dp.include_router(ginasio_router)
 dp.include_router(checkduplicates_router)
 dp.include_router(fileid_router)
@@ -159,8 +157,6 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="rclicar", description="(Admin) Distribuir pokebolas"),
         BotCommand(command="rcoins", description="(Admin) Distribuir pokecoins"),
         BotCommand(command="fileid", description="(Admin) Obter file_id de uma imagem"),
-        BotCommand(command="convertimages", description="(Admin) Converter imagens de documento para fotos"),
-        BotCommand(command="confirmarconv", description="(Admin) Confirmar conversão de imagens"),
         BotCommand(command="start", description="Iniciar o bot"),
         BotCommand(command="help", description="Obter ajuda sobre os comandos"),
         BotCommand(command="jornada", description="Registrar-se no bot"),

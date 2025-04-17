@@ -66,7 +66,7 @@ async def pokebola_command(message: types.Message):
                 )
                 return
             
-            # Checar se a carta está armazenada como documento e precisa ser convertida para foto
+            # Verificar se a carta está armazenada como documento e precisa ser convertida para foto
             try:
                 file_info = await message.bot.get_file(card.image_file_id)
                 is_photo = 'photos' in file_info.file_path
@@ -75,24 +75,38 @@ async def pokebola_command(message: types.Message):
                 if not is_photo:
                     logger.info(f"Convertendo imagem do card ID {card.id} de documento para foto")
                     
-                    # Atualizar a imagem no banco de dados
+                    # Enviar mensagem de processamento
+                    processing_msg = await message.reply(
+                        "🔄 **Processando imagem...**\n"
+                        "Convertendo para formato ideal, por favor aguarde.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    
+                    # Atualizar a imagem no banco de dados usando a função existente
                     success, error = await update_card_image_in_db(
                         bot=message.bot,
                         card_id=card.id,
-                        user_id=user_id
+                        user_id=user_id  # Usamos o ID do usuário que solicitou a carta
                     )
+                    
+                    # Remover mensagem de processamento
+                    try:
+                        await processing_msg.delete()
+                    except Exception as del_error:
+                        logger.warning(f"Erro ao remover mensagem de processamento: {del_error}")
                     
                     if not success:
                         logger.warning(f"Falha ao converter imagem do card {card.id}: {error}")
                     else:
-                        # Atualizar o file_id local para o restante do processamento
+                        # Atualizar o card local para o restante do processamento
                         # Buscar o card novamente para obter o file_id atualizado
                         result = await session.execute(
                             select(Card).where(Card.id == card.id)
                         )
                         card = result.scalar_one()
+                        logger.info(f"Card ID {card.id} atualizado com novo file_id")
             except Exception as e:
-                logger.error(f"Erro ao verificar formato de imagem do card {card.id}: {str(e)}")
+                logger.error(f"Erro ao verificar/converter formato de imagem do card {card.id}: {str(e)}")
                 # Continuar com o file_id existente mesmo em caso de erro
             
             # Get the inventory count for this card for the current user
@@ -123,16 +137,9 @@ async def pokebola_command(message: types.Message):
                 f"**Você possui:** {owned_count} unidades"
             )
             
-            # Obter file_id garantido como foto para envio
-            safe_file_id = await ensure_photo_file_id(
-                bot=message.bot,
-                content=card.image_file_id,
-                user_id=user_id,
-                force_aspect_ratio=True
-            )
-            
+            # Usar sempre o file_id mais recente do card (que pode ter sido atualizado)
             await message.reply_photo(
-                photo=safe_file_id,
+                photo=card.image_file_id,
                 caption=caption,
                 parse_mode=ParseMode.MARKDOWN
             )
