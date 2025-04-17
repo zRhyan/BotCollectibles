@@ -190,14 +190,37 @@ async def set_bot_commands(bot: Bot):
         except Exception as e:
             logging.error(f"Failed to set admin commands for user {admin.id}: {e}")
 
+# Import cleanup functions
+from admin_commands.addcarta import scheduled_cleanup as addcarta_cleanup
+from admin_commands.rcoins import cleanup_pending_transactions as rcoins_cleanup
+from admin_commands.rclicar import cleanup_pending_transactions as rclicar_cleanup
+from commands.doarcoins import cleanup_pending_transactions as doarcoins_cleanup
+
 # Run the bot
 async def main():
     # Comment this if you want to reset the database schema
     await create_db()
     
-    # Iniciar o scheduler para limpeza periódica de transações pendentes
-    asyncio.create_task(scheduled_cleanup())
-
+    # Iniciar os schedulers para limpeza periódica de transações pendentes
+    asyncio.create_task(addcarta_cleanup())
+    
+    # Criar função genérica para executar todas as limpezas
+    async def run_all_cleanups():
+        while True:
+            try:
+                # Executar todas as limpezas
+                rcoins_cleanup()
+                rclicar_cleanup()
+                doarcoins_cleanup()
+            except Exception as e:
+                logger.error(f"Erro durante limpeza programada: {str(e)}")
+            
+            # Aguardar 60 segundos
+            await asyncio.sleep(60)
+    
+    # Iniciar tarefa de limpezas
+    asyncio.create_task(run_all_cleanups())
+    
     # Recreate the database schema. Uncomment this if you want to reset the database schema
     # await recreate_database()
 
