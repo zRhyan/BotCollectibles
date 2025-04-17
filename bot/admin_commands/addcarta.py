@@ -24,7 +24,7 @@ router = Router()
 pending_card_additions = {}
 
 # Tempo máximo (em segundos) que uma transação pode ficar pendente
-TRANSACTION_TIMEOUT = 60  # 1 minuto
+TRANSACTION_TIMEOUT = 30  # 30 segundos
 
 @router.message(Command(commands=["addcarta", "add"]))
 async def add_card(message: types.Message):

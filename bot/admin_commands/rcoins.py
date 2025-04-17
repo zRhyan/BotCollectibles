@@ -25,7 +25,7 @@ router = Router()
 pending_coin_transactions = {}
 
 # Tempo máximo (em segundos) que uma transação pode ficar pendente
-TRANSACTION_TIMEOUT = 60  # 1 minuto
+TRANSACTION_TIMEOUT = 10  # 10 segundos
 
 @router.message(Command("rcoins"))
 async def distribute_coins_command(message: types.Message):

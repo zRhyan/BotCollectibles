@@ -213,7 +213,7 @@ async def main():
                 rclicar_cleanup()
                 doarcoins_cleanup()
             except Exception as e:
-                logger.error(f"Erro durante limpeza programada: {str(e)}")
+                logging.error(f"Erro durante limpeza programada: {str(e)}")
             
             # Aguardar 60 segundos
             await asyncio.sleep(60)
