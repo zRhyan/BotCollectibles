@@ -159,6 +159,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="rcoins", description="(Admin) Distribuir pokecoins"),
         BotCommand(command="fileid", description="(Admin) Obter file_id de uma imagem"),
         BotCommand(command="convertimages", description="(Admin) Converter imagens de documento para fotos"),
+        BotCommand(command="confirmarconv", description="(Admin) Confirmar conversão de imagens"),
         BotCommand(command="start", description="Iniciar o bot"),
         BotCommand(command="help", description="Obter ajuda sobre os comandos"),
         BotCommand(command="jornada", description="Registrar-se no bot"),
