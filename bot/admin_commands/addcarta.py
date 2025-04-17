@@ -4,10 +4,12 @@ from aiogram.enums import ParseMode
 from sqlalchemy.future import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func
 from database.models import User, Card, Group, Category, Tag, card_tags
 from database.session import get_session
 from bot.utils.image_utils import ensure_photo_file_id
 import logging
+import re
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -106,6 +108,25 @@ async def add_card(message: types.Message):
 
     # Save the card in the database
     async with get_session() as session:
+        # Verificar se já existe card com o mesmo nome (case insensitive)
+        normalized_card_name = card_name.strip().lower()
+        
+        # Buscar possíveis duplicatas usando LOWER() para comparação case-insensitive
+        duplicate_check = await session.execute(
+            select(Card).where(func.lower(Card.name) == normalized_card_name)
+        )
+        existing_card = duplicate_check.scalars().first()
+        
+        if existing_card:
+            await message.reply(
+                f"❌ **Erro:** Um card com nome similar já existe no sistema.\n"
+                f"• Nome existente: `{existing_card.name}` (ID: {existing_card.id})\n"
+                f"• Nome tentando adicionar: `{card_name}`\n\n"
+                f"Por favor, use um nome diferente para este card.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+            
         # Start transaction with SERIALIZABLE isolation level
         async with session.begin() as transaction:
             try:
