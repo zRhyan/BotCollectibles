@@ -1,7 +1,7 @@
 from PIL import Image
 import io
 from aiogram import Bot
-from aiogram.types import Document, FSInputFile
+from aiogram.types import Document, BufferedInputFile
 
 async def ensure_photo_file_id(bot: Bot, document: Document, force_aspect_ratio: bool = False) -> str:
     """
@@ -46,12 +46,12 @@ async def ensure_photo_file_id(bot: Bot, document: Document, force_aspect_ratio:
     # Save to bytes
     img_byte_arr = io.BytesIO()
     img.save(img_byte_arr, format='JPEG')
-    img_byte_arr.seek(0)
+    img_bytes = img_byte_arr.getvalue()
     
-    # Upload as photo
+    # Upload as photo using BufferedInputFile instead of FSInputFile
     result = await bot.send_photo(
         chat_id=bot.id,  # Send to bot itself
-        photo=FSInputFile(img_byte_arr, filename='photo.jpg')
+        photo=BufferedInputFile(img_bytes, filename='photo.jpg')
     )
     
     # Get and return the file_id of the uploaded photo
