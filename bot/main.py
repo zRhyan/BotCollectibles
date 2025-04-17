@@ -180,7 +180,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="checkduplicates", description="(Admin) Verificar duplicatas"),
     ]
 
-    # Fetch the list of admin users from the database
+    # Fetch the list of admin users from the database.
     async with get_session() as session:
         result = await session.execute(select(User).where(User.is_admin == 1))
         admin_users = result.scalars().all()
