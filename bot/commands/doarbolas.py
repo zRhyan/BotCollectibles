@@ -7,6 +7,9 @@ from database.session import get_session
 
 router = Router()
 
+# Adiciona dicionário para rastrear doações pendentes
+active_donations = {}
+
 @router.message(Command("doarbolas"))
 async def doarbolas_command(message: types.Message):
     """
@@ -14,6 +17,15 @@ async def doarbolas_command(message: types.Message):
     Expected format: /doarbolas <quantity|*> <nickname>
     """
     user_id = message.from_user.id
+
+    # Verifica se já há um processo de doação em andamento
+    if user_id in active_donations:
+        await message.reply(
+            "⚠️ Você já possui um processo de doação em andamento. Conclua ou cancele a transação atual antes de iniciar outra.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
     text_parts = message.text.split(maxsplit=1)
     if len(text_parts) < 2:
         await message.reply(
@@ -83,6 +95,9 @@ async def doarbolas_command(message: types.Message):
         )
         return
 
+    # Após as validações iniciais, antes de enviar o botão de confirmação, marca o usuário
+    active_donations[user_id] = True
+
     # Confirmation step.
     await message.reply(
         f"⚠️ **Confirmação:** Você está prestes a doar `{donation_quantity}` Pokébolas para `{nickname}`.\n"
@@ -136,6 +151,10 @@ async def confirm_poke_donation(callback: types.CallbackQuery):
             recipient.pokeballs += donation_quantity
             await session.commit()
 
+        # Remove doação ativa após confirmação
+        if donor_id in active_donations:
+            del active_donations[donor_id]
+
         # Feedback para o usuário após operação bem-sucedida
         await callback.message.edit_text(
             f"✅ Doação concluída! Você doou {donation_quantity} pokébolas para {nickname}.",
@@ -152,10 +171,18 @@ async def confirm_poke_donation(callback: types.CallbackQuery):
         await callback.answer("Erro durante a doação.", show_alert=True)
         # Idealmente, aqui você faria log do erro para depuração
 
+        if donor_id in active_donations:
+            del active_donations[donor_id]
+
 @router.callback_query(lambda call: call.data == "cancel_donation")
 async def cancel_donation(callback: types.CallbackQuery):
     """
     Cancels any pending donation action.
     """
+    # Remove o estado de doação pendente
+    user_id = callback.from_user.id
+    if user_id in active_donations:
+        del active_donations[user_id]
+
     await callback.message.edit_text("❌ Doação cancelada.", parse_mode=ParseMode.MARKDOWN)
     await callback.answer("Doação cancelada.", show_alert=True)

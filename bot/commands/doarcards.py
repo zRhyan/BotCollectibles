@@ -21,6 +21,13 @@ class DoarCardsState(StatesGroup):
 
 @router.message(Command(commands=["doarcards"]))
 async def doarcards_command(message: types.Message, state: FSMContext) -> None:
+    # Verifica se já existe um fluxo ativo no FSM
+    if await state.get_state():
+        await message.reply(
+            "⚠️ Você já possui uma doação em andamento. Conclua ou cancele o fluxo atual antes de iniciar outra.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
     """
     Entry point for the /doarcards command.
 

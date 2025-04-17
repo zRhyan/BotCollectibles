@@ -19,7 +19,7 @@ router = Router()
 active_captures = {}
 
 # Tempo máximo (em segundos) que um usuário pode ficar no estado de captura
-CAPTURE_TIMEOUT = 300  # 5 minutos
+CAPTURE_TIMEOUT = 180  # 3 minutos
 
 @router.message(Command(commands=["cap", "capturar"]))
 async def capturar_command(message: types.Message):
@@ -49,8 +49,8 @@ async def capturar_command(message: types.Message):
     if user_id in active_captures:
         await message.reply(
             "⚠️ **Você já tem um processo de captura em andamento!**\n"
-            "Complete sua captura atual ou aguarde alguns minutos antes de tentar novamente.\n"
-            "Se o problema persistir, tente novamente em 5 minutos.",
+            "Complete sua captura atual ou aguarde alguns minutos antes de tentar novamente.\n\n"
+            "Tempo de espera de **3 minutos** para reinicar o /capturar.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
