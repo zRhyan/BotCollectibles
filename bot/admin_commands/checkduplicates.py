@@ -42,42 +42,134 @@ async def check_duplicates(message: types.Message):
         
         async with get_session() as session:
             logger.debug("Verificando categorias duplicadas")
-            # Verificar categorias duplicadas - abordagem simples
+            # Verificar categorias duplicadas - com IDs e nomes completos
             result = await session.execute(text(
-                "SELECT name, COUNT(*) as count FROM categories GROUP BY name HAVING COUNT(*) > 1"
+                """
+                SELECT c1.id, c1.name, c2.id AS duplicate_id, c2.name AS duplicate_name
+                FROM categories c1
+                JOIN categories c2 ON LOWER(c1.name) = LOWER(c2.name) AND c1.id < c2.id
+                ORDER BY LOWER(c1.name)
+                """
             ))
             category_dups = result.fetchall()
+            
             if category_dups:
                 duplicates.append("**Categorias duplicadas:**")
+                # Agrupar duplicatas pelo nome para melhor visualização
+                categories_by_name = {}
                 for row in category_dups:
-                    duplicates.append(f"- Nome: `{row[0]}`, Quantidade: `{row[1]}`")
+                    name = row[1].lower()
+                    if name not in categories_by_name:
+                        categories_by_name[name] = []
+                    # Adicionar o original se for o primeiro
+                    if not categories_by_name[name]:
+                        categories_by_name[name].append((row[0], row[1]))
+                    # Adicionar o duplicado
+                    categories_by_name[name].append((row[2], row[3]))
+                
+                # Mostrar cada grupo de duplicatas
+                for name, entries in categories_by_name.items():
+                    duplicates.append(f"\n• Categoria: `{name}`")
+                    for idx, (id, full_name) in enumerate(entries):
+                        duplicates.append(f"  {idx+1}. ID: `{id}`, Nome completo: `{full_name}`")
             
             logger.debug("Verificando grupos duplicados")
-            # Verificar grupos duplicados - abordagem simples
+            # Verificar grupos duplicados - com IDs, nomes e categorias
             result = await session.execute(text(
-                "SELECT g.name, COUNT(*) as count FROM groups g GROUP BY g.name HAVING COUNT(*) > 1"
+                """
+                SELECT g1.id, g1.name, c1.name as category_name, 
+                       g2.id AS duplicate_id, g2.name AS duplicate_name, c2.name as duplicate_category
+                FROM groups g1
+                JOIN categories c1 ON g1.category_id = c1.id
+                JOIN groups g2 ON LOWER(g1.name) = LOWER(g2.name) AND g1.id < g2.id
+                JOIN categories c2 ON g2.category_id = c2.id
+                ORDER BY LOWER(g1.name)
+                """
             ))
             group_dups = result.fetchall()
+            
             if group_dups:
-                duplicates.append("\n**Grupos com mesmo nome:**")
+                duplicates.append("\n**Grupos com nomes duplicados:**")
+                # Agrupar duplicatas pelo nome para melhor visualização
+                groups_by_name = {}
                 for row in group_dups:
-                    duplicates.append(f"- Nome: `{row[0]}`, Quantidade: `{row[1]}`")
+                    name = row[1].lower()
+                    if name not in groups_by_name:
+                        groups_by_name[name] = []
+                    # Adicionar o original se for o primeiro
+                    if not groups_by_name[name]:
+                        groups_by_name[name].append((row[0], row[1], row[2]))
+                    # Adicionar o duplicado
+                    groups_by_name[name].append((row[3], row[4], row[5]))
+                
+                # Mostrar cada grupo de duplicatas
+                for name, entries in groups_by_name.items():
+                    duplicates.append(f"\n• Grupo: `{name}`")
+                    for idx, (id, full_name, category) in enumerate(entries):
+                        duplicates.append(f"  {idx+1}. ID: `{id}`, Nome completo: `{full_name}`, Categoria: `{category}`")
             
             logger.debug("Verificando cards duplicados")
-            # Verificar cards duplicados - abordagem simples
+            # Verificar cards duplicados - com IDs, nomes e raridades
             result = await session.execute(text(
-                "SELECT name, COUNT(*) as count FROM cards GROUP BY name HAVING COUNT(*) > 1"
+                """
+                SELECT c1.id, c1.name, c1.rarity, g1.name as group_name,
+                       c2.id AS duplicate_id, c2.name AS duplicate_name, c2.rarity as duplicate_rarity, g2.name as duplicate_group
+                FROM cards c1
+                JOIN groups g1 ON c1.group_id = g1.id
+                JOIN cards c2 ON LOWER(c1.name) = LOWER(c2.name) AND c1.id < c2.id
+                JOIN groups g2 ON c2.group_id = g2.id
+                ORDER BY LOWER(c1.name)
+                """
             ))
             card_dups = result.fetchall()
+            
             if card_dups:
-                duplicates.append("\n**Cards duplicados:**")
+                duplicates.append("\n**Cards com nomes duplicados:**")
+                # Agrupar duplicatas pelo nome para melhor visualização
+                cards_by_name = {}
                 for row in card_dups:
-                    duplicates.append(f"- Nome: `{row[0]}`, Quantidade: `{row[1]}`")
+                    name = row[1].lower()
+                    if name not in cards_by_name:
+                        cards_by_name[name] = []
+                    # Adicionar o original se for o primeiro
+                    if not cards_by_name[name]:
+                        cards_by_name[name].append((row[0], row[1], row[2], row[3]))
+                    # Adicionar o duplicado
+                    cards_by_name[name].append((row[4], row[5], row[6], row[7]))
+                
+                # Mostrar cada grupo de duplicatas
+                for name, entries in cards_by_name.items():
+                    duplicates.append(f"\n• Card: `{name}`")
+                    for idx, (id, full_name, rarity, group) in enumerate(entries):
+                        duplicates.append(f"  {idx+1}. ID: `{id}`, Nome completo: `{full_name}`, Raridade: `{rarity}`, Grupo: `{group}`")
 
         if duplicates:
             logger.debug(f"Encontradas {len(duplicates)} linhas de duplicação")
             response_text = "⚠️ **Registros duplicados encontrados:**\n\n" + "\n".join(duplicates)
-            await status_msg.edit_text(response_text, parse_mode=ParseMode.MARKDOWN)
+            
+            # Dividir mensagem se for muito longa
+            if len(response_text) > 4000:
+                parts = []
+                current_part = "⚠️ **Registros duplicados encontrados:**\n\n"
+                
+                for line in duplicates:
+                    if len(current_part + line + "\n") > 4000:
+                        parts.append(current_part)
+                        current_part = "⚠️ **Continuação:**\n\n" + line + "\n"
+                    else:
+                        current_part += line + "\n"
+                
+                if current_part:
+                    parts.append(current_part)
+                
+                # Enviar primeira parte editando a mensagem original
+                await status_msg.edit_text(parts[0], parse_mode=ParseMode.MARKDOWN)
+                
+                # Enviar partes restantes como novas mensagens
+                for part in parts[1:]:
+                    await message.answer(part, parse_mode=ParseMode.MARKDOWN)
+            else:
+                await status_msg.edit_text(response_text, parse_mode=ParseMode.MARKDOWN)
         else:
             logger.debug("Nenhuma duplicação encontrada")
             await status_msg.edit_text("✅ Nenhuma duplicação encontrada!", parse_mode=ParseMode.MARKDOWN)
