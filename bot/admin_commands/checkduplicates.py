@@ -5,200 +5,86 @@ from sqlalchemy import text, select, func
 from database.session import get_session
 from database.models import User, Card, Group, Category, Tag
 import logging
-import traceback
+import sys
 
-# Configurar logger
+# Configurar logger com saída para stdout para depuração imediata
 logger = logging.getLogger(__name__)
+handler = logging.StreamHandler(sys.stdout)
+handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)
 
 router = Router()
 
 @router.message(Command(commands=["checkduplicates", "checkdup"]))
 async def check_duplicates(message: types.Message):
-    """
-    Verifica registros duplicados no banco de dados.
-    Comando administrativo para encontrar e reportar inconsistências.
-    """
-    logger.info(f"Comando /checkduplicates iniciado pelo usuário {message.from_user.id} ({message.from_user.username})")
-    
-    # Verificar se o usuário é um administrador usando o modelo User diretamente
+    """Verifica registros duplicados no banco de dados."""
+    logger.debug(f"Comando /checkduplicates iniciado por {message.from_user.id}")
+
     try:
+        # Verificar se o usuário é admin
         async with get_session() as session:
-            admin_result = await session.execute(
-                select(User).where(User.id == message.from_user.id, User.is_admin == 1)
+            logger.debug("Verificando se usuário é admin")
+            result = await session.execute(
+                select(User).where(User.id == message.from_user.id)
             )
-            admin_user = admin_result.scalars().first()
+            user = result.scalars().first()
             
-            if not admin_user:
-                logger.warning(f"Tentativa de acesso não autorizado ao comando admin por {message.from_user.id}")
-                await message.reply(
-                    "🚫 **Acesso negado!** Somente administradores podem usar este comando.",
-                    parse_mode=ParseMode.MARKDOWN
-                )
+            if not user or user.is_admin == 0:
+                logger.debug(f"Usuário {message.from_user.id} não é admin")
+                await message.reply("🚫 Acesso negado! Somente administradores podem usar este comando.")
                 return
+
+        logger.debug("Usuário é admin, prosseguindo")
+        status_msg = await message.reply("🔍 Verificando duplicações... Por favor, aguarde.")
+
+        duplicates = []
+        
+        async with get_session() as session:
+            logger.debug("Verificando categorias duplicadas")
+            # Verificar categorias duplicadas - abordagem simples
+            result = await session.execute(text(
+                "SELECT name, COUNT(*) as count FROM categories GROUP BY name HAVING COUNT(*) > 1"
+            ))
+            category_dups = result.fetchall()
+            if category_dups:
+                duplicates.append("**Categorias duplicadas:**")
+                for row in category_dups:
+                    duplicates.append(f"- Nome: `{row[0]}`, Quantidade: `{row[1]}`")
             
-            logger.info(f"Acesso autorizado para {message.from_user.id}")
-            status_msg = await message.reply("🔍 **Verificando duplicações no banco de dados...**\nPor favor, aguarde...", parse_mode=ParseMode.MARKDOWN)
+            logger.debug("Verificando grupos duplicados")
+            # Verificar grupos duplicados - abordagem simples
+            result = await session.execute(text(
+                "SELECT g.name, COUNT(*) as count FROM groups g GROUP BY g.name HAVING COUNT(*) > 1"
+            ))
+            group_dups = result.fetchall()
+            if group_dups:
+                duplicates.append("\n**Grupos com mesmo nome:**")
+                for row in group_dups:
+                    duplicates.append(f"- Nome: `{row[0]}`, Quantidade: `{row[1]}`")
             
-            try:
-                # Lista para armazenar mensagens sobre duplicações
-                duplicates = []
-                
-                # 1. Verificar grupos duplicados (mesmo nome e categoria)
-                logger.info("Verificando grupos duplicados")
-                groups_query = """
-                    SELECT g.id, g.name as name, c.name as category_name, COUNT(*) OVER (PARTITION BY g.name, c.name) as count
-                    FROM groups g
-                    JOIN categories c ON g.category_id = c.id
-                    ORDER BY count DESC, name
-                """
-                group_result = await session.execute(text(groups_query))
-                group_rows = group_result.all()
-                
-                # Processar resultados para identificar duplicados
-                group_duplicates = {}
-                for row in group_rows:
-                    if row.count > 1:
-                        key = f"{row.name}_{row.category_name}"
-                        if key not in group_duplicates:
-                            group_duplicates[key] = []
-                        group_duplicates[key].append(row)
-                
-                if group_duplicates:
-                    duplicates.append("**Grupos duplicados:**")
-                    for key, rows in group_duplicates.items():
-                        name = rows[0].name
-                        category = rows[0].category_name
-                        count = rows[0].count
-                        ids = ", ".join(str(row.id) for row in rows)
-                        duplicates.append(f"- Nome: `{name}`, Categoria: `{category}`, Quantidade: `{count}`, IDs: `{ids}`")
-                
-                # 2. Verificar cards duplicados (mesmo nome)
-                logger.info("Verificando cards duplicados")
-                cards_query = """
-                    SELECT id, name, COUNT(*) OVER (PARTITION BY name) as count 
-                    FROM cards 
-                    ORDER BY count DESC, name
-                """
-                card_result = await session.execute(text(cards_query))
-                card_rows = card_result.all()
-                
-                # Processar resultados
-                card_duplicates = {}
-                for row in card_rows:
-                    if row.count > 1:
-                        if row.name not in card_duplicates:
-                            card_duplicates[row.name] = []
-                        card_duplicates[row.name].append(row)
-                
-                if card_duplicates:
-                    duplicates.append("\n**Cards duplicados:**")
-                    for name, rows in card_duplicates.items():
-                        count = rows[0].count
-                        ids = ", ".join(str(row.id) for row in rows)
-                        duplicates.append(f"- Nome: `{name}`, Quantidade: `{count}`, IDs: `{ids}`")
-                
-                # 3. Verificar categorias duplicadas (mesmo nome)
-                logger.info("Verificando categorias duplicadas")
-                categories_query = """
-                    SELECT id, name, COUNT(*) OVER (PARTITION BY name) as count 
-                    FROM categories 
-                    ORDER BY count DESC, name
-                """
-                category_result = await session.execute(text(categories_query))
-                category_rows = category_result.all()
-                
-                # Processar resultados
-                category_duplicates = {}
-                for row in category_rows:
-                    if row.count > 1:
-                        if row.name not in category_duplicates:
-                            category_duplicates[row.name] = []
-                        category_duplicates[row.name].append(row)
-                
-                if category_duplicates:
-                    duplicates.append("\n**Categorias duplicadas:**")
-                    for name, rows in category_duplicates.items():
-                        count = rows[0].count
-                        ids = ", ".join(str(row.id) for row in rows)
-                        duplicates.append(f"- Nome: `{name}`, Quantidade: `{count}`, IDs: `{ids}`")
-                
-                # 4. Verificar tags duplicadas (mesmo nome)
-                logger.info("Verificando tags duplicadas")
-                tags_query = """
-                    SELECT id, name, COUNT(*) OVER (PARTITION BY name) as count 
-                    FROM tags 
-                    ORDER BY count DESC, name
-                """
-                tag_result = await session.execute(text(tags_query))
-                tag_rows = tag_result.all()
-                
-                # Processar resultados
-                tag_duplicates = {}
-                for row in tag_rows:
-                    if row.count > 1:
-                        if row.name not in tag_duplicates:
-                            tag_duplicates[row.name] = []
-                        tag_duplicates[row.name].append(row)
-                
-                if tag_duplicates:
-                    duplicates.append("\n**Tags duplicadas:**")
-                    for name, rows in tag_duplicates.items():
-                        count = rows[0].count
-                        ids = ", ".join(str(row.id) for row in rows)
-                        duplicates.append(f"- Nome: `{name}`, Quantidade: `{count}`, IDs: `{ids}`")
-                
-                # 5. Verificar duplicados no inventário (mesmo usuário e card)
-                logger.info("Verificando duplicações no inventário")
-                inventory_query = """
-                    SELECT user_id, card_id, COUNT(*) as count
-                    FROM inventory
-                    GROUP BY user_id, card_id
-                    HAVING COUNT(*) > 1
-                    ORDER BY count DESC
-                """
-                inventory_result = await session.execute(text(inventory_query))
-                inventory_duplicates = inventory_result.all()
-                
-                if inventory_duplicates:
-                    duplicates.append("\n**Inventário com duplicações:**")
-                    for row in inventory_duplicates:
-                        duplicates.append(f"- Usuário ID: `{row.user_id}`, Card ID: `{row.card_id}`, Entradas: `{row.count}`")
-                
-                # Enviar resultados
-                if duplicates:
-                    logger.info(f"Encontradas {len(duplicates)} entradas com duplicações")
-                    # Dividir a mensagem se for muito grande (limite do Telegram é ~4096 caracteres)
-                    full_message = "⚠️ **Registros duplicados encontrados:**\n\n" + "\n".join(duplicates)
-                    
-                    # Enviar em partes se necessário
-                    if len(full_message) > 4000:
-                        chunks = [full_message[i:i+4000] for i in range(0, len(full_message), 4000)]
-                        await status_msg.edit_text(chunks[0], parse_mode=ParseMode.MARKDOWN)
-                        
-                        for chunk in chunks[1:]:
-                            await message.answer(chunk, parse_mode=ParseMode.MARKDOWN)
-                    else:
-                        await status_msg.edit_text(full_message, parse_mode=ParseMode.MARKDOWN)
-                else:
-                    logger.info("Nenhuma duplicação encontrada no banco de dados")
-                    await status_msg.edit_text(
-                        "✅ **Verificação concluída!** Nenhuma duplicação encontrada no banco de dados.",
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-                    
-            except Exception as e:
-                error_msg = str(e)
-                stack_trace = traceback.format_exc()
-                logger.error(f"Erro ao verificar duplicações: {error_msg}\n{stack_trace}")
-                
-                await status_msg.edit_text(
-                    f"❌ **Erro ao verificar duplicações:**\n`{error_msg[:1000]}`\n\n"
-                    "Verifique os logs do sistema para mais detalhes.",
-                    parse_mode=ParseMode.MARKDOWN
-                )
+            logger.debug("Verificando cards duplicados")
+            # Verificar cards duplicados - abordagem simples
+            result = await session.execute(text(
+                "SELECT name, COUNT(*) as count FROM cards GROUP BY name HAVING COUNT(*) > 1"
+            ))
+            card_dups = result.fetchall()
+            if card_dups:
+                duplicates.append("\n**Cards duplicados:**")
+                for row in card_dups:
+                    duplicates.append(f"- Nome: `{row[0]}`, Quantidade: `{row[1]}`")
+
+        if duplicates:
+            logger.debug(f"Encontradas {len(duplicates)} linhas de duplicação")
+            response_text = "⚠️ **Registros duplicados encontrados:**\n\n" + "\n".join(duplicates)
+            await status_msg.edit_text(response_text, parse_mode=ParseMode.MARKDOWN)
+        else:
+            logger.debug("Nenhuma duplicação encontrada")
+            await status_msg.edit_text("✅ Nenhuma duplicação encontrada!", parse_mode=ParseMode.MARKDOWN)
+
     except Exception as e:
-        logger.error(f"Erro ao executar comando /checkduplicates: {str(e)}\n{traceback.format_exc()}")
-        await message.reply("❌ Ocorreu um erro inesperado ao executar o comando.", parse_mode=ParseMode.MARKDOWN)
+        logger.error(f"Erro no comando /checkduplicates: {str(e)}", exc_info=True)
+        await message.reply(f"❌ Erro ao verificar duplicações: `{str(e)[:200]}`", parse_mode=ParseMode.MARKDOWN)
 
 # Comando adicional para corrigir duplicações (apenas para admins avançados)
 @router.message(Command(commands=["fixduplicates"]))
