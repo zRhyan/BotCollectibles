@@ -10,11 +10,20 @@ from database.session import get_session
 from bot.utils.image_utils import ensure_photo_file_id
 import logging
 import re
+import asyncio
+import time
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
 router = Router()
+
+# Dicionário para rastrear transações pendentes de adição de cards
+# Formato: {user_id: timestamp}
+pending_card_additions = {}
+
+# Tempo máximo (em segundos) que uma transação pode ficar pendente
+TRANSACTION_TIMEOUT = 300  # 5 minutos
 
 @router.message(Command(commands=["addcarta", "add"]))
 async def add_card(message: types.Message):
@@ -22,6 +31,24 @@ async def add_card(message: types.Message):
     Handles the /addcarta command to add a new card.
     Accepts images sent as photos or as Telegram files (documents).
     """
+    user_id = message.from_user.id
+    current_time = time.time()
+    
+    # Limpar transações antigas
+    cleanup_pending_transactions()
+    
+    # Verificar se o usuário já possui uma transação pendente
+    if user_id in pending_card_additions:
+        await message.reply(
+            "⚠️ **Já existe um processo de adição de card em andamento!**\n"
+            "Por favor, conclua o processo atual ou aguarde 5 minutos para tentar novamente.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+    
+    # Registrar a transação pendente
+    pending_card_additions[user_id] = current_time
+    
     # Check if the user is an admin
     async with get_session() as session:
         result = await session.execute(select(User).where(User.id == message.from_user.id))
@@ -219,3 +246,28 @@ async def add_card(message: types.Message):
                 "❌ **Erro interno:** Não foi possível adicionar o card.",
                 parse_mode=ParseMode.MARKDOWN
             )
+        finally:
+            # No final do processamento, remover o usuário da lista de transações pendentes
+            if user_id in pending_card_additions:
+                del pending_card_additions[user_id]
+
+def cleanup_pending_transactions():
+    """Remove transações pendentes antigas do dicionário"""
+    current_time = time.time()
+    for user_id in list(pending_card_additions.keys()):
+        if current_time - pending_card_additions[user_id] > TRANSACTION_TIMEOUT:
+            del pending_card_additions[user_id]
+            logger.info(f"Transação de adição de card expirada para usuário {user_id}")
+
+# Função para limpeza periódica das transações - será chamada pelo scheduler
+async def scheduled_cleanup():
+    """Limpa periodicamente as transações pendentes"""
+    while True:
+        try:
+            cleanup_pending_transactions()
+            logger.debug("Executada limpeza de transações pendentes")
+        except Exception as e:
+            logger.error(f"Erro durante limpeza programada: {str(e)}")
+        
+        # Esperar 60 segundos antes da próxima verificação
+        await asyncio.sleep(60)

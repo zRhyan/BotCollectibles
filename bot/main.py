@@ -31,7 +31,7 @@ from commands.favpoke import router as favpoke_router
 from commands.ginasio import router as ginasio_router
 from admin_commands.fileid import router as fileid_router
 
-from admin_commands.addcarta import router as addcarta_router
+from admin_commands.addcarta import router as addcarta_router, scheduled_cleanup
 from admin_commands.rclicar import router as rclicar_router
 from admin_commands.rcoins import router as rcoins_router
 from admin_commands.imgpd import router as imgpd_router
@@ -194,6 +194,9 @@ async def set_bot_commands(bot: Bot):
 async def main():
     # Comment this if you want to reset the database schema
     await create_db()
+    
+    # Iniciar o scheduler para limpeza periódica de transações pendentes
+    asyncio.create_task(scheduled_cleanup())
 
     # Recreate the database schema. Uncomment this if you want to reset the database schema
     # await recreate_database()
