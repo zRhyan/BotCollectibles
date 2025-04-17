@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import func
 from database.models import User, Card, Group, Category, Tag, card_tags
 from database.session import get_session
-from bot.utils.image_utils import ensure_photo_file_id
+from bot.utils.image_utils import ensure_photo_file_id, is_document_image
 import logging
 import re
 import asyncio
@@ -95,12 +95,25 @@ async def add_card(message: types.Message):
         photo_file_id = None
         try:
             if message.reply_to_message.photo:
-                photo_file_id = await ensure_photo_file_id(message.bot, message.reply_to_message.photo[-1], force_aspect_ratio=True)
+                # É uma foto - usar a versão de maior resolução
+                photo_file_id = await ensure_photo_file_id(
+                    bot=message.bot, 
+                    content=message.reply_to_message.photo[-1],
+                    user_id=user_id,
+                    force_aspect_ratio=True
+                )
             elif message.reply_to_message.document:
-                # Check if the document is an image
+                # Verificar se o documento é uma imagem válida
                 document = message.reply_to_message.document
-                valid_extensions = {".jpg", ".jpeg", ".png"}
-                if not any(document.file_name.lower().endswith(ext) for ext in valid_extensions):
+                if await is_document_image(document):
+                    # Converter documento para foto com proporção correta
+                    photo_file_id = await ensure_photo_file_id(
+                        bot=message.bot, 
+                        content=document,
+                        user_id=user_id,
+                        force_aspect_ratio=True
+                    )
+                else:
                     if user_id in pending_card_additions:
                         del pending_card_additions[user_id]
                     await message.reply(
@@ -108,7 +121,6 @@ async def add_card(message: types.Message):
                         parse_mode=ParseMode.MARKDOWN
                     )
                     return
-                photo_file_id = await ensure_photo_file_id(message.bot, document, force_aspect_ratio=True)
             else:
                 if user_id in pending_card_additions:
                     del pending_card_additions[user_id]

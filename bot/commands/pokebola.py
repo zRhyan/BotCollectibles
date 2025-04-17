@@ -1,218 +1,146 @@
 from aiogram import Router, types
-from aiogram.enums import ParseMode
 from aiogram.filters import Command
-from sqlalchemy import select, update
-from database.session import get_session
-from database.models import Card, Group, Category, Tag, Inventory
+from aiogram.enums import ParseMode
+from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
-from bot.utils.image_utils import ensure_photo_file_id
+from database.models import User, Card, Group, Category, Tag, Inventory
+from database.session import get_session
+from bot.utils.image_utils import ensure_photo_file_id, update_card_image_in_db
+import logging
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 router = Router()
 
-def parse_pokebola_argument(text: str) -> str:
-    """
-    Parse the /pokebola command argument, handling quoted strings properly.
-    Examples:
-    '/pokebola 42' -> '42'
-    '/pokebola "Pikachu"' -> 'Pikachu'
-    """
-    command_parts = text.split(maxsplit=1)
-    if len(command_parts) < 2:
-        return None
-    
-    arg = command_parts[1].strip()
-    
-    # Handle quoted search argument
-    if arg.startswith('"') and arg.endswith('"'):
-        # Remove surrounding quotes
-        arg = arg[1:-1].strip()
-    elif arg.startswith("'") and arg.endswith("'"):
-        # Also handle single quotes
-        arg = arg[1:-1].strip()
-    
-    return arg
-
-@router.message(Command(commands=["pokebola", "pb"]))
+@router.message(Command(commands=["pokebola"]))
 async def pokebola_command(message: types.Message):
     """
-    Handles the /pokebola (or /pb) command.
-    Expects one argument: either card ID or exact card name (case-insensitive).
-    For names with spaces, use quotes: /pokebola "Pikachu EX"
-    Fetches the card, then sends its image and attributes.
+    Comando para exibir informações sobre um card específico, baseado no ID ou nome.
+    Uso: /pokebola <card_id ou nome>
     """
-    # Parse arguments with better handling of quoted strings
-    args = parse_pokebola_argument(message.text)
-    if args is None:
+    # Extract the arguments
+    text_parts = message.text.split(maxsplit=1)
+    user_id = message.from_user.id
+    
+    if len(text_parts) < 2:
         await message.reply(
-            "❗ **Erro:** Forneça o ID ou nome exato do card. Exemplos:\n"
-            "• `/pokebola 42` - busca pelo ID\n"
-            "• `/pokebola \"Pikachu\"` - busca pelo nome exato (use aspas para nomes com espaços)",
+            "❗ **Erro:** Por favor, forneça um ID ou nome do card.\n"
+            "Exemplo: `/pokebola 42` ou `/pokebola Pikachu`",
             parse_mode=ParseMode.MARKDOWN
         )
         return
-
-    async with get_session() as session:
-        # Query the card by ID or name with eager loading
-        card = None
-        if args.isdigit():
-            # Search by ID (exact)
-            card_id = int(args)
-            result = await session.execute(
-                select(Card)
-                .options(
-                    joinedload(Card.group).joinedload(Group.category),  # Eager load group and category
-                    joinedload(Card.tags)  # Eager load tags
-                )
-                .where(Card.id == card_id)
+    
+    card_identifier = text_parts[1].strip()
+    
+    # Try to process as an ID first
+    try:
+        card_id = int(card_identifier)
+        search_by_id = True
+    except ValueError:
+        # If not an integer, search by name
+        card_id = None
+        search_by_id = False
+    
+    try:
+        async with get_session() as session:
+            # Prepare the query
+            query = select(Card).options(
+                joinedload(Card.group).joinedload(Group.category),
+                joinedload(Card.tags)
             )
-            # Call unique() to remove duplicates from joined eager loads
-            card = result.unique().scalar_one_or_none()
-        else:
-            # First try exact match (case-insensitive)
-            result = await session.execute(
-                select(Card)
-                .options(
-                    joinedload(Card.group).joinedload(Group.category),
-                    joinedload(Card.tags)
-                )
-                .where(Card.name.ilike(args))  # Exact match, case-insensitive
-            )
-            cards_exact = result.unique().scalars().all()
             
-            if len(cards_exact) == 1:
-                card = cards_exact[0]
-            elif len(cards_exact) > 1:
-                # Multiple cards with exactly the same name (different case)
-                # Just pick the first one since they're considered the same
-                card = cards_exact[0]
+            # Filter by ID or name
+            if search_by_id:
+                query = query.where(Card.id == card_id)
             else:
-                # If no exact match, try partial match to provide helpful suggestions
-                result = await session.execute(
-                    select(Card)
-                    .options(
-                        joinedload(Card.group).joinedload(Group.category),
-                        joinedload(Card.tags)
-                    )
-                    .where(Card.name.ilike(f"%{args}%"))
-                )
-                similar_cards = result.unique().scalars().all()
-                
-                if similar_cards:
-                    # Show suggestions if we found similar cards
-                    similar_cards_list = "\n".join([f"• {c.id}. {c.name}" for c in similar_cards[:5]])
-                    suggestion_text = f"Cards similares encontrados:\n{similar_cards_list}"
-                    if len(similar_cards) > 5:
-                        suggestion_text += f"\n...e {len(similar_cards) - 5} mais."
-                    
-                    await message.reply(
-                        f"❌ **Erro:** Nenhum card com o nome exato '{args}' foi encontrado.\n\n"
-                        f"{suggestion_text}\n\n"
-                        "Por favor, use o ID exato do card ou escreva o nome completo.",
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-                else:
-                    await message.reply(
-                        f"❌ **Erro:** Nenhum card encontrado com o nome '{args}'.",
-                        parse_mode=ParseMode.MARKDOWN
-                    )
-                return
-
-        if not card:
-            await message.reply(
-                "❌ **Erro:** Nenhum card encontrado com o ID ou nome fornecido.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-
-        # Remover verificação de inventário e modificar para mostrar quantidade se tiver
-        inventory_item = await session.execute(
-            select(Inventory)
-            .where(Inventory.user_id == message.from_user.id, Inventory.card_id == card.id)
-        )
-        inventory_item = inventory_item.scalar_one_or_none()
-        quantity_text = f" ({inventory_item.quantity}x)" if inventory_item else " (0x)"
-
-        # Construção do caption formatado corretamente
-        group = card.group
-        category = group.name if group else "Nenhum"
-        tags = [tag.name for tag in card.tags]
-        has_tags = len(tags) > 0
-
-        # Linha da tag, se existir
-        tag_line = f"🏷️ {', '.join(tags)}\n" if has_tags else ""
-
-        caption = (
-            f"🎴 Card encontrado:\n\n"
-            f"{card.rarity}{card.id}. {card.name}{quantity_text}\n"
-            f"📚 {category}\n"
-            f"{tag_line}"
-        )
-
-        # Handle the card's image properly
-        if card.image_file_id:
-            try:
-                # First, try sending as a photo
-                await message.answer_photo(
-                    photo=card.image_file_id,
-                    caption=caption,
+                query = query.where(Card.name.ilike(f"%{card_identifier}%"))
+            
+            result = await session.execute(query)
+            card = result.unique().scalars().first()
+            
+            if not card:
+                await message.reply(
+                    f"❌ **Erro:** Nenhum card encontrado {'com o ID' if search_by_id else 'com o nome'} `{card_identifier}`.",
                     parse_mode=ParseMode.MARKDOWN
                 )
-            except Exception as e:
-                error_msg = str(e).lower()
-                # Tratamento mais robusto para diferentes tipos de erro
-                if "can't use file" in error_msg or "wrong file id" in error_msg or "file is too big" in error_msg:
-                    try:
-                        # Tentar converter e limitar o tamanho da imagem
-                        new_photo_id = await ensure_photo_file_id(
-                            message.bot, 
-                            types.Document(file_id=card.image_file_id),
-                            force_aspect_ratio=True
-                        )
-                        
-                        # Update the card in database with new photo file_id
-                        await session.execute(
-                            update(Card)
-                            .where(Card.id == card.id)
-                            .values(image_file_id=new_photo_id)
-                        )
-                        await session.commit()
-                        
-                        # Try to send the converted photo
-                        await message.answer_photo(
-                            photo=new_photo_id,
-                            caption=caption,
-                            parse_mode=ParseMode.MARKDOWN
-                        )
-                    except Exception:
-                        # Se falhar na conversão, tentar enviar como documento
-                        try:
-                            await message.answer_document(
-                                document=card.image_file_id,
-                                caption=caption,
-                                parse_mode=ParseMode.MARKDOWN
-                            )
-                        except Exception:
-                            # Se ainda falhar, marcar o arquivo como inválido e enviar apenas o texto
-                            await session.execute(
-                                update(Card)
-                                .where(Card.id == card.id)
-                                .values(image_file_id="")
-                            )
-                            await session.commit()
-                            
-                            await message.reply(
-                                caption + "\n\n⚠️ *Não foi possível exibir a imagem deste card.*",
-                                parse_mode=ParseMode.MARKDOWN
-                            )
-                else:
-                    # Para outros tipos de erro, apenas enviar o texto
-                    await message.reply(
-                        caption,
-                        parse_mode=ParseMode.MARKDOWN
+                return
+            
+            # Checar se a carta está armazenada como documento e precisa ser convertida para foto
+            try:
+                file_info = await message.bot.get_file(card.image_file_id)
+                is_photo = 'photos' in file_info.file_path
+                
+                # Se não for foto, atualizar a imagem para o formato de foto
+                if not is_photo:
+                    logger.info(f"Convertendo imagem do card ID {card.id} de documento para foto")
+                    
+                    # Atualizar a imagem no banco de dados
+                    success, error = await update_card_image_in_db(
+                        bot=message.bot,
+                        card_id=card.id,
+                        user_id=user_id
                     )
-        else:
-            # Fallback to text if no image is available
-            await message.reply(
-                caption,
+                    
+                    if not success:
+                        logger.warning(f"Falha ao converter imagem do card {card.id}: {error}")
+                    else:
+                        # Atualizar o file_id local para o restante do processamento
+                        # Buscar o card novamente para obter o file_id atualizado
+                        result = await session.execute(
+                            select(Card).where(Card.id == card.id)
+                        )
+                        card = result.scalar_one()
+            except Exception as e:
+                logger.error(f"Erro ao verificar formato de imagem do card {card.id}: {str(e)}")
+                # Continuar com o file_id existente mesmo em caso de erro
+            
+            # Get the inventory count for this card for the current user
+            inventory_query = await session.execute(
+                select(Inventory)
+                .where(Inventory.user_id == user_id, Inventory.card_id == card.id)
+            )
+            inventory_item = inventory_query.scalars().first()
+            owned_count = inventory_item.quantity if inventory_item else 0
+            
+            # Prepare the caption
+            group_name = card.group.name if card.group else "Grupo Desconhecido"
+            category_name = card.group.category.name if card.group and card.group.category else "Categoria Desconhecida"
+            rarity = card.rarity
+            
+            # Prepare tags text
+            tags_text = ", ".join([tag.name for tag in card.tags]) if card.tags else "Nenhuma"
+            
+            # Send the card image with information
+            caption = (
+                f"📊 **Informações do Card** 📊\n"
+                f"**ID:** `{card.id}`\n"
+                f"**Nome:** {card.name}\n"
+                f"**Grupo:** {group_name}\n"
+                f"**Categoria:** {category_name}\n"
+                f"**Raridade:** {rarity}\n"
+                f"**Tags:** {tags_text}\n\n"
+                f"**Você possui:** {owned_count} unidades"
+            )
+            
+            # Obter file_id garantido como foto para envio
+            safe_file_id = await ensure_photo_file_id(
+                bot=message.bot,
+                content=card.image_file_id,
+                user_id=user_id,
+                force_aspect_ratio=True
+            )
+            
+            await message.reply_photo(
+                photo=safe_file_id,
+                caption=caption,
                 parse_mode=ParseMode.MARKDOWN
             )
+    
+    except Exception as e:
+        logger.error(f"Error in pokebola command: {str(e)}", exc_info=True)
+        await message.reply(
+            "❌ **Erro ao processar o comando:** Ocorreu um problema ao buscar informações do card.\n"
+            f"Detalhes: `{str(e)[:100]}`",
+            parse_mode=ParseMode.MARKDOWN
+        )
