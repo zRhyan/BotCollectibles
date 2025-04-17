@@ -17,6 +17,10 @@ async def ensure_photo_file_id(bot: Bot, document: Document, force_aspect_ratio:
     file = await bot.get_file(document.file_id)
     file_content = await bot.download_file(file.file_path)
     
+    # Check if file_content is a BytesIO object and convert to bytes if needed
+    if isinstance(file_content, io.BytesIO):
+        file_content = file_content.getvalue()
+    
     # Open image with PIL
     img = Image.open(io.BytesIO(file_content))
     
