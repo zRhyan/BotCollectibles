@@ -8,7 +8,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
 from database.models import User, Inventory
-from database.session import get_session
+from database.session import get_session, run_transaction
+import logging
+
+# Configure logger
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -69,12 +73,25 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
         nickname = tokens[1]
         donate_type = "all"
 
-        # Verify the recipient
-        async with get_session() as session:
-            recipient_res = await session.execute(
+        # Operação para verificar o destinatário
+        async def verify_recipient(session):
+            result = await session.execute(
                 select(User).where(User.nickname == nickname)
             )
-            recipient = recipient_res.scalar_one_or_none()
+            return result.scalar_one_or_none()
+            
+        # Executar operação em transação segura
+        success, recipient, error = await run_transaction(
+            verify_recipient,
+            f"Erro ao verificar destinatário {nickname}"
+        )
+        
+        if not success:
+            await message.reply(
+                f"❌ **Erro ao verificar destinatário:** {error[:100]}...",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
 
         if not recipient:
             await message.reply(
@@ -129,12 +146,25 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
         nickname = parts[1]
         donate_type = "specific"
 
-        # Check if the recipient exists
-        async with get_session() as session:
-            recipient_res = await session.execute(
+        # Operação para verificar o destinatário
+        async def verify_recipient(session):
+            result = await session.execute(
                 select(User).where(User.nickname == nickname)
             )
-            recipient = recipient_res.scalar_one_or_none()
+            return result.scalar_one_or_none()
+            
+        # Executar operação em transação segura
+        success, recipient, error = await run_transaction(
+            verify_recipient,
+            f"Erro ao verificar destinatário {nickname}"
+        )
+        
+        if not success:
+            await message.reply(
+                f"❌ **Erro ao verificar destinatário:** {error[:100]}...",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
 
         if not recipient:
             await message.reply(
@@ -212,27 +242,27 @@ async def donation_confirm(callback: CallbackQuery, state: FSMContext) -> None:
     donate_type = data.get("donate_type")
     nickname = data.get("nickname")
 
-    async with get_session() as session:
-        donor_result = await session.execute(
-            select(User).where(User.id == donor_id).options(joinedload(User.inventory))
-        )
-        donor = donor_result.unique().scalar_one_or_none()
+    if donate_type == "all":
+        # Operação para transferir todos os cards
+        async def transfer_all_cards(session):
+            # Carregar dados do doador e destinatário
+            donor_result = await session.execute(
+                select(User).where(User.id == donor_id).options(joinedload(User.inventory))
+            )
+            donor = donor_result.unique().scalar_one_or_none()
 
-        recipient_result = await session.execute(
-            select(User).where(User.nickname == nickname)
-        )
-        recipient = recipient_result.scalar_one_or_none()
-
-        if not donor or not recipient:
-            await callback.answer("Usuário não encontrado.", show_alert=True)
-            return
-
-        if donor.id == recipient.id:
-            await callback.answer("Você não pode doar cards para si mesmo.", show_alert=True)
-            return
-
-        if donate_type == "all":
-            # Transfer all cards
+            recipient_result = await session.execute(
+                select(User).where(User.nickname == nickname)
+            )
+            recipient = recipient_result.scalar_one_or_none()
+            
+            if not donor or not recipient:
+                return {"success": False, "error": "Usuário não encontrado"}
+                
+            if donor.id == recipient.id:
+                return {"success": False, "error": "Não é possível doar para si mesmo"}
+            
+            # Transferir todos os cards
             for inv_item in donor.inventory:
                 if inv_item.quantity > 0:
                     rec_inv_result = await session.execute(
@@ -252,44 +282,73 @@ async def donation_confirm(callback: CallbackQuery, state: FSMContext) -> None:
                         )
                         session.add(new_inv)
                     inv_item.quantity = 0
-
-            await session.commit()
-
+            
+            return {"success": True}
+        
+        # Executar operação em transação segura
+        success, result, error = await run_transaction(
+            transfer_all_cards,
+            "Erro ao transferir cards"
+        )
+        
+        # Limpar estado FSM, independentemente do resultado
+        await state.clear()
+        
+        if not success or not result or result.get("success") is False:
+            error_msg = error or result.get("error", "Erro desconhecido")
             await callback.message.edit_text(
-                f"✅ Doação concluída! Você doou todos os seus cards para {nickname}.",
+                f"❌ **Doação falhou:** {error_msg}",
                 parse_mode=ParseMode.MARKDOWN
             )
-            await callback.answer("Doação realizada com sucesso!", show_alert=True)
-            await state.clear()
-
-        elif donate_type == "specific":
-            donations = data.get("donations", [])
+            await callback.answer("Doação cancelada.", show_alert=True)
+            return
             
-            # Primeiro, verificamos se o usuário possui TODOS os cards necessários
-            # antes de fazer qualquer alteração no banco de dados
+        await callback.message.edit_text(
+            f"✅ Doação concluída! Você doou todos os seus cards para {nickname}.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        await callback.answer("Doação realizada com sucesso!", show_alert=True)
+
+    elif donate_type == "specific":
+        donations = data.get("donations", [])
+        
+        # Operação para transferir cards específicos
+        async def transfer_specific_cards(session):
+            # Carregar dados do doador e destinatário
+            donor_result = await session.execute(
+                select(User).where(User.id == donor_id).options(joinedload(User.inventory))
+            )
+            donor = donor_result.unique().scalar_one_or_none()
+
+            recipient_result = await session.execute(
+                select(User).where(User.nickname == nickname)
+            )
+            recipient = recipient_result.scalar_one_or_none()
+            
+            if not donor or not recipient:
+                return {"success": False, "error": "Usuário não encontrado"}
+                
+            if donor.id == recipient.id:
+                return {"success": False, "error": "Não é possível doar para si mesmo"}
+            
+            # Primeiro, verificar se o usuário possui todos os cards necessários
             invalid_donations = []
             for card_id, quantity in donations:
                 donor_inv = next((inv for inv in donor.inventory if inv.card_id == card_id), None)
                 if not donor_inv or donor_inv.quantity < quantity:
                     invalid_donations.append((card_id, quantity))
             
-            # Se houver algum card inválido, não realizamos nenhuma doação
             if invalid_donations:
                 invalid_list = ", ".join([f"ID {card_id} (x{quantity})" 
                                         for card_id, quantity in invalid_donations])
-                await callback.message.edit_text(
-                    f"❌ **Doação cancelada!** Você não possui quantidade suficiente dos seguintes cards:\n"
-                    f"`{invalid_list}`",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-                await callback.answer("Doação cancelada: cards insuficientes", show_alert=True)
-                await state.clear()
-                return
+                return {
+                    "success": False, 
+                    "error": f"Quantidade insuficiente dos seguintes cards: {invalid_list}"
+                }
             
-            # Somente prossegue com a doação se todos os cards forem válidos
+            # Transferir os cards especificados
             for card_id, quantity in donations:
                 donor_inv = next((inv for inv in donor.inventory if inv.card_id == card_id), None)
-                # A este ponto sabemos que o donor_inv existe e tem quantidade suficiente
                 donor_inv.quantity -= quantity
 
                 rec_inv_result = await session.execute(
@@ -308,19 +367,35 @@ async def donation_confirm(callback: CallbackQuery, state: FSMContext) -> None:
                         quantity=quantity
                     )
                     session.add(new_inv)
-
-            # Confirma todas as alterações apenas se todas as validações passaram
-            await session.commit()
-
+            
+            return {"success": True}
+        
+        # Executar operação em transação segura
+        success, result, error = await run_transaction(
+            transfer_specific_cards,
+            "Erro ao transferir cards específicos"
+        )
+        
+        # Limpar estado FSM, independentemente do resultado
+        await state.clear()
+        
+        if not success or not result or result.get("success") is False:
+            error_msg = error or result.get("error", "Erro desconhecido")
             await callback.message.edit_text(
-                f"✅ Doação concluída! Você doou os cards especificados para {nickname}.",
+                f"❌ **Doação falhou:** {error_msg}",
                 parse_mode=ParseMode.MARKDOWN
             )
-            await callback.answer("Doação realizada com sucesso!", show_alert=True)
-            await state.clear()
-
-        else:
-            await callback.answer("Dados da doação ausentes.", show_alert=True)
+            await callback.answer("Doação cancelada.", show_alert=True)
+            return
+            
+        await callback.message.edit_text(
+            f"✅ Doação concluída! Você doou os cards especificados para {nickname}.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        await callback.answer("Doação realizada com sucesso!", show_alert=True)
+    else:
+        await callback.answer("Dados da doação ausentes.", show_alert=True)
+        await state.clear()
 
 
 @router.callback_query(lambda call: call.data == "donation_cancel", DoarCardsState.WAITING_CONFIRMATION)

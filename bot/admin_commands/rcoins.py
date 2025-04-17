@@ -8,7 +8,7 @@ from aiogram.enums import ParseMode
 from sqlalchemy.future import select
 from sqlalchemy import update
 from database.models import User
-from database.session import get_session
+from database.session import get_session, run_transaction
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -61,15 +61,18 @@ async def distribute_coins_command(message: types.Message):
                 del pending_coin_transactions[user_id]
             return
 
-        # Check if the user is an admin in a separate session
-        is_admin = False
-        try:
-            async with get_session() as session:
-                result = await session.execute(select(User).where(User.id == user_id))
-                admin_user = result.scalar_one_or_none()
-                is_admin = admin_user is not None and admin_user.is_admin == 1
-        except Exception as e:
-            logger.error(f"Erro ao verificar permissões admin: {str(e)}")
+        # Check if the user is an admin using safe transaction
+        async def verify_admin(session):
+            result = await session.execute(select(User).where(User.id == user_id))
+            admin_user = result.scalar_one_or_none()
+            return admin_user is not None and admin_user.is_admin == 1
+            
+        success, is_admin, error = await run_transaction(
+            verify_admin, 
+            "Erro ao verificar permissões admin"
+        )
+            
+        if not success:
             if user_id in pending_coin_transactions:
                 del pending_coin_transactions[user_id]
             await message.reply(
@@ -114,32 +117,35 @@ async def distribute_coins_command(message: types.Message):
                     del pending_coin_transactions[user_id]
                 return
 
-            try:
-                # Update coins for all users in a well-defined transaction
-                async with get_session() as session:
-                    async with session.begin():
-                        result = await session.execute(
-                            update(User).values(coins=User.coins + quantity)
-                        )
-                        rows_affected = result.rowcount
-                
-                # Limpar transação após sucesso
-                if user_id in pending_coin_transactions:
-                    del pending_coin_transactions[user_id]
-
-                await message.reply(
-                    f"✅ **Sucesso!** {quantity} pokecoins foram distribuídas para {rows_affected} usuários.",
-                    parse_mode=ParseMode.MARKDOWN
+            # Definir operação para atualizar moedas de todos os usuários
+            async def update_all_users_coins(session):
+                result = await session.execute(
+                    update(User).values(coins=User.coins + quantity)
                 )
-            except Exception as e:
-                logger.error(f"Erro ao distribuir coins: {str(e)}")
-                if user_id in pending_coin_transactions:
-                    del pending_coin_transactions[user_id]
+                return result.rowcount
+            
+            # Executar operação em transação segura
+            success, rows_affected, error = await run_transaction(
+                update_all_users_coins, 
+                "Erro ao distribuir coins"
+            )
+            
+            # Limpar transação após sucesso
+            if user_id in pending_coin_transactions:
+                del pending_coin_transactions[user_id]
+                
+            if not success:
                 await message.reply(
                     f"❌ **Erro:** Ocorreu um problema ao distribuir as pokecoins.\n"
-                    f"Detalhes: `{str(e)[:100]}...`",
+                    f"Detalhes: `{error[:100]}...`",
                     parse_mode=ParseMode.MARKDOWN
                 )
+                return
+
+            await message.reply(
+                f"✅ **Sucesso!** {quantity} pokecoins foram distribuídas para {rows_affected} usuários.",
+                parse_mode=ParseMode.MARKDOWN
+            )
             return
 
         # Handle the case for a specific user
@@ -156,43 +162,53 @@ async def distribute_coins_command(message: types.Message):
                     del pending_coin_transactions[user_id]
                 return
 
-            try:
-                # Update coins for the specific user in a well-defined transaction
-                async with get_session() as session:
-                    async with session.begin():
-                        result = await session.execute(select(User).where(User.nickname == nickname))
-                        user = result.scalar_one_or_none()
-
-                        if not user:
-                            await message.reply(
-                                f"❌ **Erro:** Nenhum usuário encontrado com o nickname `{nickname}`.",
-                                parse_mode=ParseMode.MARKDOWN
-                            )
-                            if user_id in pending_coin_transactions:
-                                del pending_coin_transactions[user_id]
-                            return
-
-                        coins_before = user.coins
-                        user.coins += quantity
-
-                # Limpar transação após sucesso
-                if user_id in pending_coin_transactions:
-                    del pending_coin_transactions[user_id]
-
-                await message.reply(
-                    f"✅ **Sucesso!** {quantity} pokecoins foram adicionadas ao usuário `{nickname}`.\n"
-                    f"Total anterior: {coins_before}, Novo total: {user.coins}",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-            except Exception as e:
-                logger.error(f"Erro ao adicionar coins para {nickname}: {str(e)}")
-                if user_id in pending_coin_transactions:
-                    del pending_coin_transactions[user_id]
+            # Definir operação para atualizar moedas de usuário específico
+            async def update_user_coins(session):
+                result = await session.execute(select(User).where(User.nickname == nickname))
+                user = result.scalar_one_or_none()
+                
+                if not user:
+                    return None
+                
+                coins_before = user.coins
+                user.coins += quantity
+                
+                return {
+                    "before": coins_before,
+                    "after": user.coins,
+                    "nickname": user.nickname
+                }
+            
+            # Executar operação em transação segura
+            success, result, error = await run_transaction(
+                update_user_coins, 
+                f"Erro ao adicionar coins para {nickname}"
+            )
+            
+            # Limpar transação após sucesso
+            if user_id in pending_coin_transactions:
+                del pending_coin_transactions[user_id]
+            
+            if not success:
                 await message.reply(
                     f"❌ **Erro:** Ocorreu um problema ao adicionar pokecoins para `{nickname}`.\n"
-                    f"Detalhes: `{str(e)[:100]}...`",
+                    f"Detalhes: `{error[:100]}...`",
                     parse_mode=ParseMode.MARKDOWN
                 )
+                return
+            
+            if result is None:
+                await message.reply(
+                    f"❌ **Erro:** Nenhum usuário encontrado com o nickname `{nickname}`.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+
+            await message.reply(
+                f"✅ **Sucesso!** {quantity} pokecoins foram adicionadas ao usuário `{nickname}`.\n"
+                f"Total anterior: {result['before']}, Novo total: {result['after']}",
+                parse_mode=ParseMode.MARKDOWN
+            )
     except Exception as global_err:
         logger.error(f"Global error in rcoins: {str(global_err)}", exc_info=True)
         # Limpar transação pendente em caso de erro global

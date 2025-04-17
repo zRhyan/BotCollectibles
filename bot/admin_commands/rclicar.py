@@ -8,7 +8,7 @@ from aiogram.enums import ParseMode
 from sqlalchemy.future import select
 from sqlalchemy import update, func
 from database.models import User
-from database.session import get_session
+from database.session import get_session, run_transaction
 
 # Configurar logging
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +26,7 @@ router = Router()
 pending_transactions = {}
 
 # Tempo máximo (em segundos) que uma transação pode ficar pendente
-TRANSACTION_TIMEOUT = 60  # 1 minuto
+TRANSACTION_TIMEOUT = 10  # 10 segundos
 
 @router.message(Command("rclicar"))
 async def reset_pokeballs_command(message: types.Message):
@@ -62,15 +62,18 @@ async def reset_pokeballs_command(message: types.Message):
                 del pending_transactions[user_id]
             return
 
-        # Check if the user is an admin
-        is_admin = False
-        try:
-            async with get_session() as session:
-                result = await session.execute(select(User).where(User.id == user_id))
-                admin_user = result.scalar_one_or_none()
-                is_admin = admin_user is not None and admin_user.is_admin == 1
-        except Exception as e:
-            logger.error(f"Erro ao verificar permissões admin: {str(e)}")
+        # Check if the user is an admin using safe transaction
+        async def verify_admin(session):
+            result = await session.execute(select(User).where(User.id == user_id))
+            admin_user = result.scalar_one_or_none()
+            return admin_user is not None and admin_user.is_admin == 1
+            
+        success, is_admin, error = await run_transaction(
+            verify_admin, 
+            "Erro ao verificar permissões admin"
+        )
+            
+        if not success:
             if user_id in pending_transactions:
                 del pending_transactions[user_id]
             await message.reply(
@@ -115,60 +118,55 @@ async def reset_pokeballs_command(message: types.Message):
                     del pending_transactions[user_id]
                 return
 
-            try:
-                async with get_session() as session:
-                    # Primeiro contar quantos usuários existem para verificação posterior
-                    count_result = await session.execute(select(func.count(User.id)))
-                    total_users = count_result.scalar_one()
-                    
-                    if total_users == 0:
-                        await message.reply(
-                            "⚠️ **Aviso:** Não há usuários registrados no sistema.",
-                            parse_mode=ParseMode.MARKDOWN
-                        )
-                        if user_id in pending_transactions:
-                            del pending_transactions[user_id]
-                        return
-                    
-                    # Iniciar uma transação explícita
-                    async with session.begin():
-                        # Atualizar pokebolas para todos os usuários
-                        result = await session.execute(
-                            update(User)
-                            .values(pokeballs=User.pokeballs + quantity)
-                            .execution_options(synchronize_session=False)
-                        )
-                        
-                        # Verificar quantas linhas foram afetadas
-                        rows_affected = result.rowcount
-
-                # Limpar transação pendente após sucesso
-                if user_id in pending_transactions:
-                    del pending_transactions[user_id]
-                        
-                # Log da operação
-                admin_username = message.from_user.username or str(message.from_user.id)
-                logger.info(f"Admin {admin_username} adicionou {quantity} pokebolas para {rows_affected} usuários")
+            # Definir operações para obter contagem e atualizar pokébolas
+            async def update_all_users_pokeballs(session):
+                # Contar usuários
+                count_result = await session.execute(select(func.count(User.id)))
+                total_users = count_result.scalar_one()
                 
-                await message.reply(
-                    f"✅ **Sucesso!** {quantity} Pokébolas foram distribuídas para {rows_affected} usuários.\n"
-                    f"Total de usuários no sistema: {total_users}",
-                    parse_mode=ParseMode.MARKDOWN
+                if total_users == 0:
+                    return {"total": 0, "updated": 0}
+                
+                # Atualizar pokebolas para todos os usuários
+                result = await session.execute(
+                    update(User)
+                    .values(pokeballs=User.pokeballs + quantity)
+                    .execution_options(synchronize_session=False)
                 )
-            
-            except Exception as e:
-                error_msg = str(e)
-                logger.error(f"Erro ao distribuir pokebolas: {error_msg}")
                 
-                # Limpar transação pendente em caso de erro
-                if user_id in pending_transactions:
-                    del pending_transactions[user_id]
-                    
+                # Retornar resultados
+                return {
+                    "total": total_users,
+                    "updated": result.rowcount
+                }
+            
+            # Executar operação em transação segura
+            success, result, error = await run_transaction(
+                update_all_users_pokeballs, 
+                "Erro ao distribuir pokebolas"
+            )
+            
+            # Limpar transação pendente
+            if user_id in pending_transactions:
+                del pending_transactions[user_id]
+                
+            if not success:
                 await message.reply(
                     f"❌ **Erro:** Ocorreu um problema ao distribuir as Pokébolas.\n"
-                    f"Detalhes: `{error_msg[:100]}...`",
+                    f"Detalhes: `{error[:100]}...`",
                     parse_mode=ParseMode.MARKDOWN
                 )
+                return
+            
+            # Log da operação
+            admin_username = message.from_user.username or str(message.from_user.id)
+            logger.info(f"Admin {admin_username} adicionou {quantity} pokebolas para {result['updated']} usuários")
+            
+            await message.reply(
+                f"✅ **Sucesso!** {quantity} Pokébolas foram distribuídas para {result['updated']} usuários.\n"
+                f"Total de usuários no sistema: {result['total']}",
+                parse_mode=ParseMode.MARKDOWN
+            )
             return
 
         # Handle the case for a specific user
@@ -185,61 +183,66 @@ async def reset_pokeballs_command(message: types.Message):
                     del pending_transactions[user_id]
                 return
 
-            # Update Pokébolas for the specific user with better error handling
-            try:
-                async with get_session() as session:
-                    result = await session.execute(select(User).where(User.nickname == nickname))
-                    user = result.scalar_one_or_none()
-
-                    if not user:
-                        await message.reply(
-                            f"❌ **Erro:** Nenhum usuário encontrado com o nickname `{nickname}`.",
-                            parse_mode=ParseMode.MARKDOWN
-                        )
-                        if user_id in pending_transactions:
-                            del pending_transactions[user_id]
-                        return
-                    
-                    # Valor atual para confirmação
-                    pokeballs_before = user.pokeballs or 0
-                    
-                    # Atualizar e confirmar
-                    if user.pokeballs is None:
-                        user.pokeballs = quantity
-                    else:
-                        user.pokeballs += quantity
-                    await session.commit()
-                    
-                    # Log da operação
-                    admin_username = message.from_user.username or str(message.from_user.id)
-                    logger.info(
-                        f"Admin {admin_username} adicionou {quantity} pokebolas para o usuário {nickname}. "
-                        f"Total anterior: {pokeballs_before}, Novo total: {user.pokeballs}"
-                    )
-                    
-                    await message.reply(
-                        f"✅ **Sucesso!** {quantity} Pokébolas foram adicionadas ao usuário `{nickname}`.\n"
-                        f"Total anterior: {pokeballs_before}, Novo total: {user.pokeballs}",
-                        parse_mode=ParseMode.MARKDOWN
-                    )
+            # Definir operação para atualizar pokébolas de usuário específico
+            async def update_user_pokeballs(session):
+                result = await session.execute(select(User).where(User.nickname == nickname))
+                user = result.scalar_one_or_none()
                 
-                # Limpar transação pendente após sucesso
-                if user_id in pending_transactions:
-                    del pending_transactions[user_id]
+                if not user:
+                    return None
                 
-            except Exception as e:
-                error_msg = str(e)
-                logger.error(f"Erro ao adicionar pokebolas para {nickname}: {error_msg}")
+                # Valor atual para confirmação
+                pokeballs_before = user.pokeballs or 0
                 
-                # Limpar transação pendente em caso de erro
-                if user_id in pending_transactions:
-                    del pending_transactions[user_id]
+                # Atualizar
+                if user.pokeballs is None:
+                    user.pokeballs = quantity
+                else:
+                    user.pokeballs += quantity
                 
+                return {
+                    "before": pokeballs_before,
+                    "after": user.pokeballs,
+                    "nickname": user.nickname
+                }
+            
+            # Executar operação em transação segura
+            success, result, error = await run_transaction(
+                update_user_pokeballs, 
+                f"Erro ao adicionar pokebolas para {nickname}"
+            )
+            
+            # Limpar transação pendente
+            if user_id in pending_transactions:
+                del pending_transactions[user_id]
+            
+            if not success:
                 await message.reply(
-                    f"❌ **Erro:** Ocorreu um problema ao adicionar Pokébolas para `{nickname}`.\n"
-                    f"Detalhes: `{error_msg[:100]}...`",
+                    f"❌ **Erro:** Ocorreu um problema ao adicionar Pokébolas.\n"
+                    f"Detalhes: `{error[:100]}...`",
                     parse_mode=ParseMode.MARKDOWN
                 )
+                return
+                
+            if result is None:
+                await message.reply(
+                    f"❌ **Erro:** Nenhum usuário encontrado com o nickname `{nickname}`.",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+            
+            # Log da operação
+            admin_username = message.from_user.username or str(message.from_user.id)
+            logger.info(
+                f"Admin {admin_username} adicionou {quantity} pokebolas para o usuário {nickname}. "
+                f"Total anterior: {result['before']}, Novo total: {result['after']}"
+            )
+            
+            await message.reply(
+                f"✅ **Sucesso!** {quantity} Pokébolas foram adicionadas ao usuário `{nickname}`.\n"
+                f"Total anterior: {result['before']}, Novo total: {result['after']}",
+                parse_mode=ParseMode.MARKDOWN
+            )
 
     except Exception as global_err:
         logger.error(f"Global error in rclicar: {str(global_err)}", exc_info=True)
