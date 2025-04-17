@@ -94,6 +94,7 @@ dp.include_router(jornada_router)
 dp.include_router(pokedex_router)
 dp.include_router(mochila_router)
 dp.include_router(pokebanco_router)
+dp.include_router(convert_images_router)
 dp.include_router(ginasio_router)
 dp.include_router(checkduplicates_router)
 dp.include_router(fileid_router)
@@ -112,7 +113,7 @@ dp.include_router(doarcoins_router)
 dp.include_router(venderc_router) #Before pokemart. If it work I'm a happy man.
 dp.include_router(roubar_router)
 dp.include_router(pokemart_router)
-dp.include_router(convert_images_router)
+
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
