@@ -24,6 +24,10 @@ async def ensure_photo_file_id(bot: Bot, document: Document, force_aspect_ratio:
         str: File ID of the processed photo with correct aspect ratio
     """
     try:
+        # Se não precisamos forçar proporção, apenas retornamos o file_id original
+        if not force_aspect_ratio:
+            return document.file_id
+
         # Download the file
         file = await bot.get_file(document.file_id)
         file_content = await bot.download_file(file.file_path)
@@ -34,10 +38,6 @@ async def ensure_photo_file_id(bot: Bot, document: Document, force_aspect_ratio:
         
         # Open image with PIL
         img = Image.open(io.BytesIO(file_content))
-        
-        # Se não precisamos forçar proporção, apenas retornamos o file_id original
-        if not force_aspect_ratio:
-            return document.file_id
         
         # Calculate target dimensions for 3:4 ratio
         current_ratio = img.width / img.height
@@ -72,6 +72,7 @@ async def ensure_photo_file_id(bot: Bot, document: Document, force_aspect_ratio:
         # Enviar para o admin (@zRhYaN) em vez do próprio bot
         try:
             logger.info(f"Enviando imagem processada para {ADMIN_USERNAME} para obter file_id")
+            # Importante: este comando de bot deve estar fora de qualquer transação do SQLAlchemy
             result = await bot.send_photo(
                 chat_id=ADMIN_CHAT_ID,
                 photo=BufferedInputFile(img_bytes, filename='processed_card.jpg'),
@@ -85,13 +86,11 @@ async def ensure_photo_file_id(bot: Bot, document: Document, force_aspect_ratio:
                 return new_file_id
             else:
                 logger.warning("Não foi possível obter o file_id da imagem processada")
+                return document.file_id
         except Exception as e:
             logger.error(f"Erro ao enviar imagem para admin: {str(e)}")
+            return document.file_id
         
-        # Fallback para o file_id original caso não seja possível enviar para o admin
-        return document.file_id
-
     except Exception as e:
         logger.error(f"Erro ao processar imagem: {str(e)}")
-        # Fallback para o file_id original em caso de erro
         return document.file_id

@@ -43,8 +43,9 @@ async def add_card(message: types.Message):
         return
 
     # Extract the image and convert if necessary
+    photo_file_id = None
     if message.reply_to_message.photo:
-        photo_file_id = await ensure_photo_file_id(message.bot, message.reply_to_message.photo[-1])
+        photo_file_id = await ensure_photo_file_id(message.bot, message.reply_to_message.photo[-1], force_aspect_ratio=True)
     elif message.reply_to_message.document:
         # Check if the document is an image
         document = message.reply_to_message.document
@@ -55,10 +56,18 @@ async def add_card(message: types.Message):
                 parse_mode=ParseMode.MARKDOWN
             )
             return
-        photo_file_id = await ensure_photo_file_id(message.bot, document)
+        photo_file_id = await ensure_photo_file_id(message.bot, document, force_aspect_ratio=True)
     else:
         await message.reply(
             "❗ **Erro:** A mensagem respondida deve conter uma imagem ou um arquivo de imagem válido.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
+    # Garantir que temos um file_id válido antes de continuar
+    if not photo_file_id:
+        await message.reply(
+            "❌ **Erro:** Não foi possível obter um ID válido para a imagem.",
             parse_mode=ParseMode.MARKDOWN
         )
         return
@@ -108,6 +117,7 @@ async def add_card(message: types.Message):
 
     # Save the card in the database
     async with get_session() as session:
+        # Verificações iniciais fora da transação 
         # Verificar se já existe card com o mesmo nome (case insensitive)
         normalized_card_name = card_name.strip().lower()
         
@@ -127,9 +137,10 @@ async def add_card(message: types.Message):
             )
             return
             
-        # Start transaction with SERIALIZABLE isolation level
-        async with session.begin() as transaction:
-            try:
+        # Iniciar transação clara e explícita
+        try:
+            # Começar transação explicitamente
+            async with session.begin() as transaction:
                 # Ensure the category exists
                 result = await session.execute(select(Category).where(Category.name == category_name))
                 category = result.scalars().first()  # Alterado scalar_one_or_none() para scalars().first()
@@ -172,10 +183,12 @@ async def add_card(message: types.Message):
                 new_card = Card(
                     name=card_name,
                     rarity=rarity,
-                    image_file_id=photo_file_id,
+                    image_file_id=photo_file_id,  # Usar o file_id obtido anteriormente
                     group_id=group.id
                 )
                 session.add(new_card)
+                
+                # Aguardar o flush para ter o ID disponível
                 await session.flush()
                 
                 # Log success
@@ -184,26 +197,25 @@ async def add_card(message: types.Message):
                 # Associate the card with the tag (if provided)
                 if tag:
                     await session.execute(card_tags.insert().values(card_id=new_card.id, tag_id=tag.id))
+                
+                # A transação é confirmada automaticamente ao sair do bloco
 
-                await transaction.commit()
+            # Confirm success - fora da transação
+            await message.reply(
+                f"✅ **Sucesso!** O card '{card_name}' (ID: {new_card.id}) foi adicionado ao sistema! 🃏✨",
+                parse_mode=ParseMode.MARKDOWN
+            )
 
-                # Confirm success
-                await message.reply(
-                    f"✅ **Sucesso!** O card '{card_name}' (ID: {new_card.id}) foi adicionado ao sistema! 🃏✨",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-
-            except IntegrityError as e:
-                await transaction.rollback()
-                logger.error(f"IntegrityError while adding card '{card_name}': {str(e)}")
-                await message.reply(
-                    "❌ **Erro:** Ocorreu um problema ao salvar o card no banco de dados.",
-                    parse_mode=ParseMode.MARKDOWN
-                )
-            except Exception as e:
-                await transaction.rollback()
-                logger.error(f"Unexpected error while adding card '{card_name}': {str(e)}")
-                await message.reply(
-                    "❌ **Erro interno:** Não foi possível adicionar o card.",
-                    parse_mode=ParseMode.MARKDOWN
-                )
+        except IntegrityError as e:
+            # A transação é revertida automaticamente no caso de exceção
+            logger.error(f"IntegrityError while adding card '{card_name}': {str(e)}")
+            await message.reply(
+                "❌ **Erro:** Ocorreu um problema ao salvar o card no banco de dados.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error while adding card '{card_name}': {str(e)}")
+            await message.reply(
+                "❌ **Erro interno:** Não foi possível adicionar o card.",
+                parse_mode=ParseMode.MARKDOWN
+            )
