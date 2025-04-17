@@ -94,6 +94,7 @@ dp.include_router(pokedex_router)
 dp.include_router(mochila_router)
 dp.include_router(pokebanco_router)
 dp.include_router(ginasio_router)
+dp.include_router(checkduplicates_router)
 dp.include_router(fileid_router)
 dp.include_router(capturar_router)
 dp.include_router(addcarta_router)
@@ -110,7 +111,7 @@ dp.include_router(doarcoins_router)
 dp.include_router(venderc_router) #Before pokemart. If it work I'm a happy man.
 dp.include_router(roubar_router)
 dp.include_router(pokemart_router)
-dp.include_router(checkduplicates_router)
+
 
 # Register the middleware
 dp.message.middleware(AntiFloodMiddleware(limit=5, interval=10))
@@ -173,6 +174,7 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="roubar", description="Trocar cartas com outro treinador"),
         BotCommand(command="favpoke", description="Definir seu card favorito"),
         BotCommand(command="ginasio", description="Ver o ranking do ginásio"),
+        BotCommand(command="checkduplicates", description="(Admin) Verificar duplicatas"),
     ]
 
     # Fetch the list of admin users from the database
