@@ -92,6 +92,7 @@ dp.message.register(help_command, Command("help"))
 #------------------------------------------------------
 dp.include_router(jornada_router)
 dp.include_router(pokedex_router)
+dp.include_router(modcard_router)
 dp.include_router(mochila_router)
 dp.include_router(pokebola_router)
 dp.include_router(pokebanco_router)
@@ -112,7 +113,7 @@ dp.include_router(doarcoins_router)
 dp.include_router(venderc_router) #Before pokemart. If it work I'm a happy man.
 dp.include_router(roubar_router)
 dp.include_router(pokemart_router)
-dp.include_router(modcard_router)
+
 
 
 # Register the middleware
