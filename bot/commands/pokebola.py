@@ -5,15 +5,108 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import joinedload
 from database.models import User, Card, Group, Category, Tag, Inventory
 from database.session import get_session
-from bot.utils.image_utils import ensure_photo_file_id, update_card_image_in_db
+from bot.utils.image_utils import ensure_photo_file_id
 import logging
+import tempfile
+import os
+import io
+from PIL import Image
+from aiogram.types import FSInputFile
 
 # Configure logger
 logger = logging.getLogger(__name__)
 
 router = Router()
 
-@router.message(Command(commands=["pokebola"]))
+async def convert_document_to_photo(bot, file_id, user_id):
+    """
+    Converte um documento em uma foto e retorna o novo file_id.
+    
+    Args:
+        bot: Instância do bot
+        file_id: ID do arquivo a ser convertido
+        user_id: ID do usuário para enviar a foto temporária
+        
+    Returns:
+        str: File ID da foto convertida ou None se falhar
+    """
+    try:
+        # Verificar se é realmente um documento
+        file_info = await bot.get_file(file_id)
+        is_photo = 'photos' in file_info.file_path
+        
+        if is_photo:
+            # Já é uma foto, não precisa converter
+            return file_id
+            
+        # Baixar o arquivo
+        file_content = await bot.download_file(file_info.file_path)
+        
+        # Garantir que é bytes
+        if isinstance(file_content, io.BytesIO):
+            file_content = file_content.getvalue()
+        
+        # Processar a imagem com PIL
+        img = Image.open(io.BytesIO(file_content))
+        
+        # Calcular dimensões para proporção 3:4 se necessário
+        current_ratio = img.width / img.height
+        target_ratio = 3/4
+        
+        # Processar a imagem para corrigir proporção
+        if abs(current_ratio - target_ratio) > 0.1:
+            if current_ratio > target_ratio:  # Imagem muito larga
+                new_width = int(img.height * target_ratio)
+                left = (img.width - new_width) // 2
+                img = img.crop((left, 0, left + new_width, img.height))
+            else:  # Imagem muito alta
+                new_height = int(img.width / target_ratio)
+                top = (img.height - new_height) // 2
+                img = img.crop((0, top, img.width, top + new_height))
+        
+        # Converter para RGB se necessário
+        if img.mode != 'RGB':
+            img = img.convert('RGB')
+        
+        # Salvar em arquivo temporário
+        with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as temp_file:
+            temp_path = temp_file.name
+            img.save(temp_path, format='JPEG', quality=95)
+        
+        try:
+            # Enviar para o usuário e obter novo file_id
+            result = await bot.send_photo(
+                chat_id=user_id,
+                photo=FSInputFile(temp_path),
+                caption="🔄 Processando imagem..."
+            )
+            
+            # Obter novo file_id e apagar a mensagem temporária
+            if result and result.photo:
+                new_file_id = result.photo[-1].file_id
+                
+                # Apagar mensagem temporária
+                try:
+                    await bot.delete_message(chat_id=user_id, message_id=result.message_id)
+                except Exception as e:
+                    logger.warning(f"Não foi possível remover mensagem temporária: {str(e)}")
+                
+                return new_file_id
+            
+            return None
+            
+        finally:
+            # Limpar arquivo temporário
+            try:
+                os.unlink(temp_path)
+            except Exception as e:
+                logger.warning(f"Erro ao remover arquivo temporário: {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Erro ao converter documento para foto: {str(e)}", exc_info=True)
+        return None
+
+@router.message(Command(commands=["pokebola", "pb"]))
 async def pokebola_command(message: types.Message):
     """
     Comando para exibir informações sobre um card específico, baseado no ID ou nome.
@@ -71,7 +164,7 @@ async def pokebola_command(message: types.Message):
                 file_info = await message.bot.get_file(card.image_file_id)
                 is_photo = 'photos' in file_info.file_path
                 
-                # Se não for foto, atualizar a imagem para o formato de foto
+                # Se não for foto, converter para foto
                 if not is_photo:
                     logger.info(f"Convertendo imagem do card ID {card.id} de documento para foto")
                     
@@ -82,11 +175,11 @@ async def pokebola_command(message: types.Message):
                         parse_mode=ParseMode.MARKDOWN
                     )
                     
-                    # Atualizar a imagem no banco de dados usando a função existente
-                    success, error = await update_card_image_in_db(
+                    # Converter documento para foto
+                    new_file_id = await convert_document_to_photo(
                         bot=message.bot,
-                        card_id=card.id,
-                        user_id=user_id  # Usamos o ID do usuário que solicitou a carta
+                        file_id=card.image_file_id,
+                        user_id=user_id
                     )
                     
                     # Remover mensagem de processamento
@@ -95,16 +188,13 @@ async def pokebola_command(message: types.Message):
                     except Exception as del_error:
                         logger.warning(f"Erro ao remover mensagem de processamento: {del_error}")
                     
-                    if not success:
-                        logger.warning(f"Falha ao converter imagem do card {card.id}: {error}")
-                    else:
-                        # Atualizar o card local para o restante do processamento
-                        # Buscar o card novamente para obter o file_id atualizado
-                        result = await session.execute(
-                            select(Card).where(Card.id == card.id)
-                        )
-                        card = result.scalar_one()
+                    if new_file_id:
+                        # Atualizar o file_id no banco de dados
+                        card.image_file_id = new_file_id
+                        await session.commit()
                         logger.info(f"Card ID {card.id} atualizado com novo file_id")
+                    else:
+                        logger.warning(f"Falha ao converter imagem do card {card.id}")
             except Exception as e:
                 logger.error(f"Erro ao verificar/converter formato de imagem do card {card.id}: {str(e)}")
                 # Continuar com o file_id existente mesmo em caso de erro
@@ -137,12 +227,27 @@ async def pokebola_command(message: types.Message):
                 f"**Você possui:** {owned_count} unidades"
             )
             
-            # Usar sempre o file_id mais recente do card (que pode ter sido atualizado)
-            await message.reply_photo(
-                photo=card.image_file_id,
-                caption=caption,
-                parse_mode=ParseMode.MARKDOWN
-            )
+            # Se a conversão foi feita ou já era foto, podemos enviar normalmente
+            try:
+                await message.reply_photo(
+                    photo=card.image_file_id,
+                    caption=caption,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+            except Exception as photo_error:
+                # Se ainda ocorrer erro, tentar enviar como documento com caption
+                logger.error(f"Erro ao enviar como foto: {str(photo_error)}")
+                
+                await message.reply(
+                    caption,
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                
+                # E enviar imagem separadamente como documento
+                await message.reply_document(
+                    document=card.image_file_id,
+                    caption=f"ID {card.id}: {card.name}"
+                )
     
     except Exception as e:
         logger.error(f"Error in pokebola command: {str(e)}", exc_info=True)
