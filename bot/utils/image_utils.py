@@ -9,6 +9,10 @@ from aiogram.types import Document, BufferedInputFile, InputFile
 # Configurar logger
 logger = logging.getLogger(__name__)
 
+# ID do usuário que receberá as imagens temporárias para obtenção do file_id
+ADMIN_USERNAME = "@zRhYaN"
+ADMIN_CHAT_ID = 1686075980  # ID correspondente ao @zRhYaN
+
 async def ensure_photo_file_id(bot: Bot, document: Document, force_aspect_ratio: bool = False) -> str:
     """
     Ensures a document is converted to a photo with correct aspect ratio if needed.
@@ -65,19 +69,26 @@ async def ensure_photo_file_id(bot: Bot, document: Document, force_aspect_ratio:
         img_byte_arr.seek(0)
         img_bytes = img_byte_arr.getvalue()
         
-        # Método alternativo: usar o ID de um usuário real (como o administrador) 
-        # para enviar a imagem e obter um file_id válido
-        # Isso exige que o ID do usuário seja fornecido à função
+        # Enviar para o admin (@zRhYaN) em vez do próprio bot
+        try:
+            logger.info(f"Enviando imagem processada para {ADMIN_USERNAME} para obter file_id")
+            result = await bot.send_photo(
+                chat_id=ADMIN_CHAT_ID,
+                photo=BufferedInputFile(img_bytes, filename='processed_card.jpg'),
+                caption=f"🔄 Imagem processada para proporção 3:4\n⚠️ Esta mensagem pode ser apagada após processamento"
+            )
+            
+            # Obter o file_id da imagem processada
+            if result and result.photo:
+                new_file_id = result.photo[-1].file_id
+                logger.info(f"Novo file_id obtido com sucesso: {new_file_id[:10]}...")
+                return new_file_id
+            else:
+                logger.warning("Não foi possível obter o file_id da imagem processada")
+        except Exception as e:
+            logger.error(f"Erro ao enviar imagem para admin: {str(e)}")
         
-        # Como não podemos enviar mensagem para o próprio bot para obter um file_id,
-        # a alternativa mais prática é armazenar e usar o file_id original,
-        # mesmo sabendo que a imagem que será exibida não terá a proporção exata de 3:4
-        
-        logger.warning("Impossível obter file_id para imagem processada sem enviar mensagem. " +
-                       "Usando file_id original, o que pode resultar na exibição da imagem com proporção incorreta.")
-        
-        # Solução temporária: retornar o file_id original
-        # Nota: Isto não garante que a imagem exibida tenha a proporção 3:4
+        # Fallback para o file_id original caso não seja possível enviar para o admin
         return document.file_id
 
     except Exception as e:
