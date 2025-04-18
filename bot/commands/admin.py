@@ -46,3 +46,16 @@ async def promote_to_admin(message: types.Message):
         await session.commit()
 
         await message.reply(f"✅ **Sucesso!** O usuário @{nickname} agora é um administrador.")
+
+@router.message(Command(commands=["getgroupid"]))
+async def get_group_id(message: types.Message):
+    """Comando temporário para obter o ID do grupo"""
+    chat = message.chat
+    await message.reply(
+        f"📝 **Informações do Chat:**\n"
+        f"• **Nome:** `{chat.title}`\n"
+        f"• **Username:** `@{chat.username}`\n"
+        f"• **ID:** `{chat.id}`\n"
+        f"• **Tipo:** `{chat.type}`",
+        parse_mode=ParseMode.MARKDOWN
+    )
