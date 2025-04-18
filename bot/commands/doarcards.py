@@ -210,18 +210,11 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
             )
 
     else:
-        # Format: /doarcards <card_id xQuant, ...> <nickname>
-        parts = cards_input.rsplit(maxsplit=1)
-        if len(parts) < 2:
-            await message.reply(
-                "❗ **Erro:** Especifique os IDs dos cards, as quantidades e o nickname do destinatário.\n"
-                "Exemplo: `/doarcards 7 x3, 45 x2, 12 x5 nickname`",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-
-        card_data = parts[0]
-        nickname = parts[1]
+        # Corrigido: Não tentar extrair nickname novamente se estamos em modo reply
+        card_data = cards_input
+        
+        # Removido o código problemático que tentava extrair o nickname novamente
+        # Agora o nickname já foi determinado corretamente acima
 
         # Operação para verificar o destinatário
         async def verify_recipient(session):
