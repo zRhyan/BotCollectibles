@@ -50,82 +50,87 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
             parse_mode=ParseMode.MARKDOWN
         )
         return
-        
-    """
-    Entry point for the /doarcards command.
-
-    Expected formats:
-      - /doarcards * <nickname>
-      - /doarcards <card_id xQuantidade, ...> <nickname>
-        e.g. /doarcards 7 x3, 45 x2, 12 x5 nickname
-    """
-    text_parts = message.text.split(maxsplit=1)
-    if len(text_parts) < 2:
-        await message.reply(
-            "❗ **Erro:** Especifique os cards que deseja doar e o nickname do destinatário.\n"
-            "Exemplos:\n"
-            "• `/doarcards * nickname` para doar todos os seus cards\n"
-            "• `/doarcards 7 x3, 45 x2, 12 x5 nickname` para doar quantidades específicas.",
-            parse_mode=ParseMode.MARKDOWN
-        )
-        return
-
-    args = text_parts[1].strip()
-    tokens = args.split()
-    if not tokens:
-        await message.reply("❗ **Erro:** Argumentos inválidos.", parse_mode=ParseMode.MARKDOWN)
-        return
 
     donor_id = message.from_user.id
+    nickname = None
+    cards_input = None
 
-    # Check if user tries to donate all cards
-    if tokens[0] == "*":
-        # Format: /doarcards * <nickname>
-        if len(tokens) < 2:
-            await message.reply(
-                "❗ **Erro:** Especifique o nickname do destinatário.\n"
-                "Exemplo: `/doarcards * nickname`",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-
-        nickname = tokens[1]
-        donate_type = "all"
-
-        # Operação para verificar o destinatário
-        async def verify_recipient(session):
-            result = await session.execute(
-                select(User).where(User.nickname == nickname)
-            )
-            return result.scalar_one_or_none()
-            
-        # Executar operação em transação segura
-        success, recipient, error = await run_transaction(
-            verify_recipient,
-            f"Erro ao verificar destinatário {nickname}"
-        )
-        
-        if not success:
-            await message.reply(
-                f"❌ **Erro ao verificar destinatário:** {error[:100]}...",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-
-        if not recipient:
-            await message.reply(
-                f"❌ **Erro:** Nenhum usuário encontrado com o nickname `{nickname}`.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-
-        if recipient.id == donor_id:
+    # Verifica se é uma resposta a uma mensagem
+    if message.reply_to_message:
+        replied_user = message.reply_to_message.from_user
+        if replied_user.id == donor_id:
             await message.reply(
                 "❗ Você não pode doar cards para si mesmo.",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
+            
+        # Buscar o nickname do usuário respondido
+        async def get_recipient_nickname(session):
+            result = await session.execute(
+                select(User).where(User.id == replied_user.id)
+            )
+            return result.scalar_one_or_none()
+            
+        success, recipient, error = await run_transaction(
+            get_recipient_nickname,
+            f"Erro ao buscar destinatário"
+        )
+        
+        if not success or not recipient:
+            await message.reply(
+                "❌ **Erro:** O usuário que você respondeu ainda não está registrado no bot.\n"
+                "Peça para ele usar o comando /jornada primeiro!",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+            
+        nickname = recipient.nickname
+        cards_input = message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else "*"
+    else:
+        # Formato antigo: /doarcards <cards> <nickname>
+        text_parts = message.text.split(maxsplit=1)
+        if len(text_parts) < 2:
+            await message.reply(
+                "❗ **Uso do comando:**\n\n"
+                "1️⃣ Responda a mensagem de alguém com:\n"
+                "• `/doarcards *` para doar todos os seus cards\n"
+                "• `/doarcards 7 x3, 45 x2` para doar cards específicos\n\n"
+                "2️⃣ Ou use o formato tradicional:\n"
+                "• `/doarcards * nickname`\n"
+                "• `/doarcards 7 x3, 45 x2 nickname`",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
 
+        args = text_parts[1].strip()
+        if "*" in args:
+            # Format: /doarcards * <nickname>
+            parts = args.split()
+            if len(parts) < 2:
+                await message.reply(
+                    "❗ **Erro:** Especifique o nickname do destinatário.\n"
+                    "Exemplo: `/doarcards * nickname`",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+            cards_input = "*"
+            nickname = parts[1]
+        else:
+            # Format: /doarcards <card_id xQuant, ...> <nickname>
+            parts = args.rsplit(maxsplit=1)
+            if len(parts) < 2:
+                await message.reply(
+                    "❗ **Erro:** Especifique os IDs dos cards, as quantidades e o nickname do destinatário.\n"
+                    "Exemplo: `/doarcards 7 x3, 45 x2 nickname`",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
+            cards_input = parts[0]
+            nickname = parts[1]
+
+    # A partir daqui, temos nickname e cards_input definidos
+    if cards_input == "*":
         # Processar doação de todos os cards imediatamente
         async def transfer_all_cards(session):
             # Carregar dados do doador e destinatário
@@ -205,7 +210,7 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
 
     else:
         # Format: /doarcards <card_id xQuant, ...> <nickname>
-        parts = args.rsplit(maxsplit=1)
+        parts = cards_input.rsplit(maxsplit=1)
         if len(parts) < 2:
             await message.reply(
                 "❗ **Erro:** Especifique os IDs dos cards, as quantidades e o nickname do destinatário.\n"
