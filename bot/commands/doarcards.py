@@ -5,7 +5,7 @@ from aiogram.fsm.context import FSMContext
 from sqlalchemy import select
 from sqlalchemy.orm import joinedload
 
-from database.models import User, Inventory
+from database.models import User, Inventory, Card
 from database.session import get_session, run_transaction
 import logging
 
@@ -279,11 +279,12 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
                 )
                 return
 
-        # Processar doação de cards específicos imediatamente
+        # Process the donation of specific cards
         async def transfer_specific_cards(session):
-            # Carregar dados do doador e destinatário
+            # Load donor and recipient data with card details
             donor_result = await session.execute(
-                select(User).where(User.id == donor_id).options(joinedload(User.inventory))
+                select(User).where(User.id == donor_id)
+                .options(joinedload(User.inventory).joinedload(Inventory.card))
             )
             donor = donor_result.unique().scalar_one_or_none()
 
@@ -298,12 +299,24 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
             if donor.id == recipient.id:
                 return {"success": False, "error": "Não é possível doar para si mesmo"}
             
-            # Primeiro, verificar se o usuário possui todos os cards necessários
+            # First, verify if the user has all the necessary cards
             invalid_donations = []
+            cards_info = []
+            total_cards = 0
+            
             for card_id, quantity in donations:
                 donor_inv = next((inv for inv in donor.inventory if inv.card_id == card_id), None)
                 if not donor_inv or donor_inv.quantity < quantity:
                     invalid_donations.append((card_id, quantity))
+                else:
+                    card_info = {
+                        "id": card_id,
+                        "name": donor_inv.card.name,
+                        "rarity": donor_inv.card.rarity,
+                        "quantity": quantity
+                    }
+                    cards_info.append(card_info)
+                    total_cards += quantity
             
             if invalid_donations:
                 invalid_list = ", ".join([f"ID {card_id} (x{quantity})" 
@@ -313,7 +326,7 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
                     "error": f"Quantidade insuficiente dos seguintes cards: {invalid_list}"
                 }
             
-            # Transferir os cards especificados
+            # Transfer the specified cards
             for card_id, quantity in donations:
                 donor_inv = next((inv for inv in donor.inventory if inv.card_id == card_id), None)
                 donor_inv.quantity -= quantity
@@ -335,9 +348,13 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
                     )
                     session.add(new_inv)
             
-            return {"success": True, "donated_cards": donations}
+            return {
+                "success": True, 
+                "donated_cards": cards_info,
+                "total_cards": total_cards
+            }
         
-        # Executar operação em transação segura
+        # Execute operation in a safe transaction
         success, result, error = await run_transaction(
             transfer_specific_cards,
             "Erro ao transferir cards específicos"
@@ -351,12 +368,20 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
             )
             return
             
-        # Gerar mensagem de sucesso
+        # Generate success message with detailed card information
         donated_cards = result.get("donated_cards", [])
-        cards_list = "\n".join([f"- Card ID `{card_id}`: `{quantity}` unidades" for card_id, quantity in donated_cards])
-        await message.reply(
-            f"✅ **Doação realizada com sucesso!**\n\n"
-            f"**Cards doados:**\n{cards_list}\n\n"
-            f"**Destinatário:** `{nickname}`",
-            parse_mode=ParseMode.MARKDOWN
-        )
+        total_cards = result.get("total_cards", 0)
+        
+        if donated_cards:
+            cards_list = "\n".join([
+                f"{card['rarity']}{card['id']}. {card['name']} ({card['quantity']}x)"
+                for card in donated_cards
+            ])
+            
+            await message.reply(
+                f"✨ **Doação realizada com sucesso!** ✨\n\n"
+                f"📦 **Cards doados ({total_cards} no total):**\n{cards_list}\n\n"
+                f"🎁 **Destinatário:** `{nickname}`\n\n"
+                f"_Que sua generosidade traga muita alegria ao colecionador!_ 🌟",
+                parse_mode=ParseMode.MARKDOWN
+            )
