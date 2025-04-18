@@ -16,13 +16,13 @@ router = Router()
 
 # Lista de grupos oficiais onde o comando pode ser usado
 OFFICIAL_GROUPS = {
-    "pokutrocas": -1,  # IDs dos grupos serão adicionados aqui
-    "pokutv": -1,
-    "pokurandom": -1,
-    "pokumusica": -1,
-    "pokuasia": -1,
-    "pokuanimagame": -1,
-    "pokuginasio": -1
+    "pokutrocas": -1002618854262,  # IDs dos grupos serão adicionados aqui
+    "pokutv": -1002618485697,
+    "pokurandom": -1002535827033,
+    "pokumusica": -1002640439235,
+    "pokuasia": -1002582806902,
+    "pokuanimagame": -1002521798243,
+    "pokuginasio": -1002533762710
 }
 
 @router.message(Command(commands=["doarcards"]))
