@@ -86,6 +86,7 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
             return
             
         nickname = recipient.nickname
+        # Pegando apenas os cards quando for resposta (removendo o /doarcards)
         cards_input = message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else "*"
     else:
         # Formato antigo: /doarcards <cards> <nickname>
