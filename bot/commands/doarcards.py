@@ -53,8 +53,16 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
         return
 
     donor_id = message.from_user.id
+    
+    # Atualizar o nome de usuário no banco de dados se o usuário mudou de @username
+    async with get_session() as session:
+        # Silently update username if it changed
+        if message.from_user.username:
+            await update_username_if_changed(session, donor_id, message.from_user.username)
+    
     nickname = None
     cards_input = None
+    recipient_id = None
 
     # Verifica se é uma resposta a uma mensagem
     if message.reply_to_message:
@@ -66,31 +74,25 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
             )
             return
             
-        # Buscar o nickname do usuário respondido
-        async def get_recipient_nickname(session):
-            result = await session.execute(
-                select(User).where(User.id == replied_user.id)
-            )
-            return result.scalar_one_or_none()
+        # Buscar o destinatário usando a nova função aprimorada
+        async with get_session() as session:
+            # Use o ID do usuário respondido para buscar diretamente no banco
+            recipient = await session.get(User, replied_user.id)
             
-        success, recipient, error = await run_transaction(
-            get_recipient_nickname,
-            f"Erro ao buscar destinatário"
-        )
-        
-        if not success or not recipient:
-            await message.reply(
-                "❌ **Erro:** O usuário que você respondeu ainda não está registrado no bot.\n"
-                "Peça para ele usar o comando /jornada primeiro!",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
+            if not recipient:
+                await message.reply(
+                    "❌ **Erro:** O usuário que você respondeu ainda não está registrado no bot.\n"
+                    "Peça para ele usar o comando /jornada primeiro!",
+                    parse_mode=ParseMode.MARKDOWN
+                )
+                return
             
-        nickname = recipient.nickname
-        # Pegando apenas os cards quando for resposta (removendo o /doarcards)
-        cards_input = message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else "*"
+            recipient_id = recipient.id    
+            nickname = recipient.nickname
+            # Pegando apenas os cards quando for resposta (removendo o /doarcards)
+            cards_input = message.text.split(maxsplit=1)[1] if len(message.text.split()) > 1 else "*"
     else:
-        # Formato antigo: /doarcards <cards> <nickname>
+        # Formato antigo: /doarcards <cards> <nickname/username>
         text_parts = message.text.split(maxsplit=1)
         if len(text_parts) < 2:
             await message.reply(
@@ -99,39 +101,70 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
                 "• `/doarcards *` para doar todos os seus cards\n"
                 "• `/doarcards 7 x3, 45 x2` para doar cards específicos\n\n"
                 "2️⃣ Ou use o formato tradicional:\n"
-                "• `/doarcards * nickname`\n"
-                "• `/doarcards 7 x3, 45 x2 nickname`",
+                "• `/doarcards * nickname` ou `/doarcards * @username`\n"
+                "• `/doarcards 7 x3, 45 x2 nickname` ou `/doarcards 7 x3, 45 x2 @username`",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
 
         args = text_parts[1].strip()
         if "*" in args:
-            # Format: /doarcards * <nickname>
+            # Format: /doarcards * <nickname or @username>
             parts = args.split()
             if len(parts) < 2:
                 await message.reply(
-                    "❗ **Erro:** Especifique o nickname do destinatário.\n"
-                    "Exemplo: `/doarcards * nickname`",
+                    "❗ **Erro:** Especifique o nickname ou @username do destinatário.\n"
+                    "Exemplo: `/doarcards * nickname` ou `/doarcards * @username`",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
             cards_input = "*"
-            nickname = parts[1]
+            recipient_reference = parts[1]  # Pode ser nickname ou @username
+            
+            # Buscar o usuário pelo nickname ou username
+            async with get_session() as session:
+                recipient = await find_user_by_reference(session, recipient_reference, message_user_id=donor_id)
+                if not recipient:
+                    await message.reply(
+                        f"❌ **Erro:** Nenhum usuário encontrado com o nome `{recipient_reference}`.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return
+                nickname = recipient.nickname
+                recipient_id = recipient.id
         else:
-            # Format: /doarcards <card_id xQuant, ...> <nickname>
+            # Format: /doarcards <card_id xQuant, ...> <nickname or @username>
             parts = args.rsplit(maxsplit=1)
             if len(parts) < 2:
                 await message.reply(
-                    "❗ **Erro:** Especifique os IDs dos cards, as quantidades e o nickname do destinatário.\n"
-                    "Exemplo: `/doarcards 7 x3, 45 x2 nickname`",
+                    "❗ **Erro:** Especifique os IDs dos cards, as quantidades e o nickname/username do destinatário.\n"
+                    "Exemplo: `/doarcards 7 x3, 45 x2 nickname` ou `/doarcards 7 x3, 45 x2 @username`",
                     parse_mode=ParseMode.MARKDOWN
                 )
                 return
             cards_input = parts[0]
-            nickname = parts[1]
+            recipient_reference = parts[1]  # Pode ser nickname ou @username
+            
+            # Buscar o usuário pelo nickname ou username
+            async with get_session() as session:
+                recipient = await find_user_by_reference(session, recipient_reference, message_user_id=donor_id)
+                if not recipient:
+                    await message.reply(
+                        f"❌ **Erro:** Nenhum usuário encontrado com o nome `{recipient_reference}`.",
+                        parse_mode=ParseMode.MARKDOWN
+                    )
+                    return
+                nickname = recipient.nickname
+                recipient_id = recipient.id
 
-    # A partir daqui, temos nickname e cards_input definidos
+    # A partir daqui, temos nickname, recipient_id e cards_input definidos
+    if recipient_id == donor_id:
+        await message.reply(
+            "❗ Você não pode doar cards para si mesmo.",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+
     if cards_input == "*":
         # Processar doação de todos os cards imediatamente
         async def transfer_all_cards(session):
@@ -142,7 +175,7 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
             donor = donor_result.unique().scalar_one_or_none()
 
             recipient_result = await session.execute(
-                select(User).where(User.nickname == nickname)
+                select(User).where(User.id == recipient_id)
             )
             recipient = recipient_result.scalar_one_or_none()
             
@@ -183,7 +216,7 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
                     inv_item.quantity = 0
             
             return {"success": True, "donated_cards": donated_cards}
-        
+            
         # Executar operação em transação segura
         success, result, error = await run_transaction(
             transfer_all_cards,
@@ -216,46 +249,10 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
             )
 
     else:
-        # Corrigido: Não tentar extrair nickname novamente se estamos em modo reply
+        # Processar doação específica
         card_data = cards_input
-        
-        # Removido o código problemático que tentava extrair o nickname novamente
-        # Agora o nickname já foi determinado corretamente acima
 
-        # Operação para verificar o destinatário
-        async def verify_recipient(session):
-            result = await session.execute(
-                select(User).where(User.nickname == nickname)
-            )
-            return result.scalar_one_or_none()
-            
-        # Executar operação em transação segura
-        success, recipient, error = await run_transaction(
-            verify_recipient,
-            f"Erro ao verificar destinatário {nickname}"
-        )
-        
-        if not success:
-            await message.reply(
-                f"❌ **Erro ao verificar destinatário:** {error[:100]}...",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-
-        if not recipient:
-            await message.reply(
-                f"❌ **Erro:** Nenhum usuário encontrado com o nickname `{nickname}`.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-
-        if recipient.id == donor_id:
-            await message.reply(
-                "❗ Você não pode doar cards para si mesmo.",
-                parse_mode=ParseMode.MARKDOWN
-            )
-            return
-
+        # Análise da string de doações
         donations: list[tuple[int, int]] = []
         for item in card_data.split(","):
             try:
@@ -294,7 +291,7 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
             donor = donor_result.unique().scalar_one_or_none()
 
             recipient_result = await session.execute(
-                select(User).where(User.nickname == nickname)
+                select(User).where(User.id == recipient_id)
             )
             recipient = recipient_result.scalar_one_or_none()
             
@@ -394,3 +391,54 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
                 f"_Que sua generosidade traga muita alegria ao colecionador!_ 🌟",
                 parse_mode=ParseMode.MARKDOWN
             )
+
+async def find_user_by_reference(session, reference: str, message_user_id: int = None) -> User | None:
+    """
+    Enhanced function to find a user by @username, nickname, or from a message reference.
+    Also updates the database if the username has changed.
+    
+    Args:
+        session: Database session
+        reference: Username with @ or nickname without @
+        message_user_id: Current user's ID to avoid self-references
+        
+    Returns:
+        User object or None if not found
+    """
+    # Clean up reference (remove @ if present)
+    reference_clean = reference.lstrip("@").lower()
+    
+    # Try to find by username OR nickname case-insensitive
+    stmt = select(User).where(
+        (User.username.ilike(reference_clean)) | 
+        (User.nickname.ilike(f"%{reference_clean}%"))
+    )
+    
+    # Exclude self if message_user_id is provided
+    if message_user_id is not None:
+        stmt = stmt.where(User.id != message_user_id)
+        
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def update_username_if_changed(session, user_id: int, current_username: str) -> None:
+    """
+    Updates the user's username in the database if it has changed.
+    
+    Args:
+        session: Database session
+        user_id: Telegram user ID
+        current_username: Current Telegram username
+    """
+    if not current_username:
+        return  # Skip if no username provided
+        
+    stmt = select(User).where(User.id == user_id)
+    result = await session.execute(stmt)
+    user = result.scalar_one_or_none()
+    
+    if user and user.username != current_username:
+        logger.info(f"Updating username for user {user_id} from '{user.username}' to '{current_username}'")
+        user.username = current_username
+        await session.commit()

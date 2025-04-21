@@ -71,6 +71,13 @@ async def roubar_command(message: types.Message) -> None:
         
     requester_id = message.from_user.id
     logger.info("Comando /roubar recebido do usuário %s", requester_id)
+    
+    # Atualizar o nome de usuário no banco de dados se o usuário mudou de @username
+    async with get_session() as session:
+        # Silently update username if it changed
+        if message.from_user.username:
+            await update_username_if_changed(session, requester_id, message.from_user.username)
+    
     text_parts = message.text.strip().split(maxsplit=1)
     if len(text_parts) < 2:
         await message.reply(
@@ -84,19 +91,29 @@ async def roubar_command(message: types.Message) -> None:
         await message.reply("❗ **Erro:** Argumentos insuficientes.", parse_mode=ParseMode.MARKDOWN)
         return
 
-    # Extrai o @username do alvo
-    possible_mention = remainder_list[0]
-    target_mention = None
-    if possible_mention.startswith("@"):
-        target_mention = possible_mention
-        remainder_list = remainder_list[1:]
+    # Extrai o @username ou nickname do alvo
+    target_reference = None
+    
+    # Caso 1: Verificar se é resposta a uma mensagem
+    if message.reply_to_message and message.reply_to_message.from_user:
+        replied_user = message.reply_to_message.from_user
+        if replied_user.id == requester_id:
+            await message.reply(
+                "❗ **Erro:** Você não pode trocar cards consigo mesmo.",
+                parse_mode=ParseMode.MARKDOWN
+            )
+            return
+        target_reference = replied_user.username or str(replied_user.id)
+    # Caso 2: Verificar se o primeiro argumento é uma referência a usuário
     else:
-        # Se não houver menção, tenta extrair a partir da mensagem respondida
-        if message.reply_to_message and message.reply_to_message.from_user:
-            target_mention = "@" + (message.reply_to_message.from_user.username or "")
+        possible_reference = remainder_list[0]
+        if possible_reference.startswith("@") or not any(c.isdigit() for c in possible_reference):
+            target_reference = possible_reference
+            remainder_list = remainder_list[1:]
         else:
             await message.reply(
-                "❗ **Erro:** Forneça @username do alvo ou responda a mensagem dele.\nEx: `/roubar @user 20 2, 25 1 | 10 3, 42 2`",
+                "❗ **Erro:** Forneça @username ou nickname do alvo, ou responda a mensagem dele.\n"
+                "Ex: `/roubar @user 20 2, 25 1 | 10 3, 42 2`",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
@@ -124,7 +141,7 @@ async def roubar_command(message: types.Message) -> None:
         return
 
     left_part = all_cards_str[:delim_pos].strip()
-    right_part = all_cards_str[delim_pos + 1:].strip()  # Corrigido de .trip() para .strip()
+    right_part = all_cards_str[delim_pos + 1:].strip()
 
     if not left_part or not right_part:
         await message.reply(
@@ -141,23 +158,26 @@ async def roubar_command(message: types.Message) -> None:
         await message.reply(f"❗ **Erro de Formato:** {ve}", parse_mode=ParseMode.MARKDOWN)
         return
 
-    # Busca o usuário–alvo no banco de dados
+    # Busca o usuário–alvo no banco de dados com a função aprimorada
+    target_user = None
+    target_display = None
     async with get_session() as session:
-        target_user = await find_user_by_mention(session, target_mention)
+        target_user = await find_user_by_reference(session, target_reference, message_user_id=requester_id)
         if not target_user:
             await message.reply(
-                f"❌ **Erro:** Usuário `{target_mention}` não encontrado.",
+                f"❌ **Erro:** Usuário `{target_reference}` não encontrado.",
                 parse_mode=ParseMode.MARKDOWN
             )
             return
         target_id = target_user.id
+        target_display = f"@{target_user.username}" if target_user.username else target_user.nickname
 
     # Monta o texto da proposta de troca
     request_text = await build_trade_text(requested_cards, offered_cards)
     confirm_text = (
         f"🔁 **Pedido de troca:**\n\n"
-        f"👤 Solicitante: {message.from_user.username or requester_id}\n"
-        f"🎯 Alvo: {target_mention}\n\n"
+        f"👤 Solicitante: {message.from_user.username or message.from_user.full_name or requester_id}\n"
+        f"🎯 Alvo: {target_display}\n\n"
         f"{request_text}\n"
         "Clique em **Aceitar** para confirmar ou **Recusar** para cancelar."
     )
@@ -471,18 +491,56 @@ def parse_card_data(card_block: str) -> list[tuple[int, int]]:
     return cards
 
 
-async def find_user_by_mention(session, mention: str) -> User | None:
+async def find_user_by_reference(session, reference: str, message_user_id: int = None) -> User | None:
     """
-    Busca um usuário cujo username ou nickname (case-insensitive)
-    combine com a menção fornecida (ex: '@Fulano').
+    Enhanced function to find a user by @username, nickname, or from a message reference.
+    Also updates the database if the username has changed.
+    
+    Args:
+        session: Database session
+        reference: Username with @ or nickname without @
+        message_user_id: Current user's ID to avoid self-references
+        
+    Returns:
+        User object or None if not found
     """
-    mention_clean = mention.lstrip("@").lower()
+    # Clean up reference (remove @ if present)
+    reference_clean = reference.lstrip("@").lower()
+    
+    # Try to find by username OR nickname case-insensitive
     stmt = select(User).where(
-        (User.username == mention_clean) |
-        (User.nickname.ilike(f"%{mention_clean}%"))
+        (User.username.ilike(reference_clean)) | 
+        (User.nickname.ilike(f"%{reference_clean}%"))
     )
-    res = await session.execute(stmt)
-    return res.scalar_one_or_none()
+    
+    # Exclude self if message_user_id is provided
+    if message_user_id is not None:
+        stmt = stmt.where(User.id != message_user_id)
+        
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def update_username_if_changed(session, user_id: int, current_username: str) -> None:
+    """
+    Updates the user's username in the database if it has changed.
+    
+    Args:
+        session: Database session
+        user_id: Telegram user ID
+        current_username: Current Telegram username
+    """
+    if not current_username:
+        return  # Skip if no username provided
+        
+    stmt = select(User).where(User.id == user_id)
+    result = await session.execute(stmt)
+    user = result.scalar_one_or_none()
+    
+    if user and user.username != current_username:
+        logger.info(f"Updating username for user {user_id} from '{user.username}' to '{current_username}'")
+        user.username = current_username
+        await session.commit()
 
 
 def sent_message_id_placeholder() -> str:
