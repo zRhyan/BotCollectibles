@@ -7,6 +7,7 @@ from sqlalchemy.orm import joinedload
 
 from database.models import User, Inventory, Card
 from database.session import get_session, run_transaction
+from database.utils import consolidate_inventory_duplicates
 import logging
 
 # Configure logger
@@ -151,6 +152,10 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
             if donor.id == recipient.id:
                 return {"success": False, "error": "Não é possível doar para si mesmo"}
             
+            # Consolidar possíveis duplicatas do doador e destinatário antes de processar
+            await consolidate_inventory_duplicates(session, donor.id)
+            await consolidate_inventory_duplicates(session, recipient.id)
+            
             # Lista de cards doados para mensagem de sucesso
             donated_cards = []
             
@@ -158,6 +163,7 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
             for inv_item in donor.inventory:
                 if inv_item.quantity > 0:
                     donated_cards.append((inv_item.card_id, inv_item.quantity))
+                    # Buscar ou criar entrada no inventário do destinatário
                     rec_inv_result = await session.execute(
                         select(Inventory).where(
                             Inventory.user_id == recipient.id,
@@ -297,6 +303,10 @@ async def doarcards_command(message: types.Message, state: FSMContext) -> None:
                 
             if donor.id == recipient.id:
                 return {"success": False, "error": "Não é possível doar para si mesmo"}
+            
+            # Consolidar possíveis duplicatas do doador e destinatário antes de processar
+            await consolidate_inventory_duplicates(session, donor.id)
+            await consolidate_inventory_duplicates(session, recipient.id)
             
             # First, verify if the user has all the necessary cards
             invalid_donations = []

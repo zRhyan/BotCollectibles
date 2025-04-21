@@ -177,7 +177,6 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="roubar", description="Trocar cartas com outro treinador"),
         BotCommand(command="favpoke", description="Definir seu card favorito"),
         BotCommand(command="ginasio", description="Ver o ranking do ginásio"),
-        BotCommand(command="checkduplicates", description="(Admin) Verificar duplicatas"),
     ]
 
     # Fetch the list of admin users from the database.

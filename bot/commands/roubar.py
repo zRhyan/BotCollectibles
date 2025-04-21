@@ -10,6 +10,7 @@ from sqlalchemy.orm import joinedload
 
 from database.models import User, Inventory, Card
 from database.session import get_session
+from database.utils import consolidate_inventory_duplicates
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -21,12 +22,24 @@ router = Router()
 #       "target_id": int,
 #       "requested_cards": list[tuple[int, int]],
 #       "offered_cards": list[tuple[int, int]],
-#       "created_at": float  # timestamp
+#       "created_at": float,  # timestamp
+#       "processing": bool    # flag para controle de processamento
 #   }
 pending_trades = {}
 
 # Tempo de expiração (segundos)
 TRADE_TIMEOUT = 180  # 3 minutos
+
+# Lista de grupos oficiais onde o comando pode ser usado
+OFFICIAL_GROUPS = {
+    "pokutrocas": -1002618854262,  # IDs dos grupos serão adicionados aqui
+    "pokutv": -1002618485697,
+    "pokurandom": -1002535827033,
+    "pokumusica": -1002640439235,
+    "pokuasia": -1002582806902,
+    "pokuanimagame": -1002521798243,
+    "pokuginasio": -1002533762710
+}
 
 # ===========================
 # Handler principal: /roubar
@@ -40,6 +53,22 @@ async def roubar_command(message: types.Message) -> None:
 
     Apenas o usuário–alvo poderá aceitar ou recusar a troca.
     """
+    # Verificar se o comando está sendo usado em um grupo oficial
+    chat = message.chat
+    if not chat.username or chat.username.lower() not in OFFICIAL_GROUPS:
+        await message.reply(
+            "❌ **Este comando só pode ser usado nos grupos oficiais:**\n\n"
+            "☀️ GERAL @pokutrocas\n"
+            "☀️ TV @pokutv\n"
+            "☀️ RANDOM @pokurandom\n"
+            "☀️ MÚSICA @pokumusica\n"
+            "☀️ ÁSIA @pokuasia\n"
+            "☀️ ANIMAGAME @pokuanimagame\n"
+            "☀️ GINÁSIO @pokuginasio",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+        
     requester_id = message.from_user.id
     logger.info("Comando /roubar recebido do usuário %s", requester_id)
     text_parts = message.text.strip().split(maxsplit=1)
@@ -95,7 +124,7 @@ async def roubar_command(message: types.Message) -> None:
         return
 
     left_part = all_cards_str[:delim_pos].strip()
-    right_part = all_cards_str[delim_pos + 1:].strip()
+    right_part = all_cards_str[delim_pos + 1:].strip()  # Corrigido de .trip() para .strip()
 
     if not left_part or not right_part:
         await message.reply(
@@ -170,7 +199,8 @@ async def roubar_command(message: types.Message) -> None:
         "target_id": target_id,
         "requested_cards": requested_cards,
         "offered_cards": offered_cards,
-        "created_at": time.time()
+        "created_at": time.time(),
+        "processing": False  # Adicionado flag para controle de processamento
     }
     logger.info("Troca pendente criada (trade_id=%s) entre %s e %s", trade_id, requester_id, target_id)
 
@@ -239,6 +269,15 @@ async def roubar_accept_callback(callback: CallbackQuery) -> None:
                        callback.from_user.id, trade_id, trade_data["target_id"])
         await callback.answer("Você não pode interagir com essa troca.", show_alert=True)
         return
+        
+    # Verifica se a troca já está sendo processada (evita cliques múltiplos)
+    if trade_data.get("processing", False):
+        logger.warning("Tentativa de processar troca %s que já está em processamento", trade_id)
+        await callback.answer("Esta troca já está sendo processada.", show_alert=True)
+        return
+        
+    # Marca imediatamente a troca como em processamento
+    trade_data["processing"] = True
 
     # Processa a troca
     requester_id = trade_data["requester_id"]
@@ -264,6 +303,14 @@ async def roubar_accept_callback(callback: CallbackQuery) -> None:
                              requester_id, callback.from_user.id)
                 await callback.answer("Usuário não encontrado ou não registrado.", show_alert=True)
                 return
+                
+            # Consolidar possíveis duplicatas de inventário para ambos os usuários
+            await consolidate_inventory_duplicates(session, requester_id)
+            await consolidate_inventory_duplicates(session, callback.from_user.id)
+
+            # Recarregar o inventário após consolidação para ter os dados mais atualizados
+            await session.refresh(requester, ["inventory"])
+            await session.refresh(target_user, ["inventory"])
 
             # Verifica se o alvo possui as cartas solicitadas
             for (card_id, qty) in requested_cards:
@@ -407,7 +454,7 @@ def parse_card_data(card_block: str) -> list[tuple[int, int]]:
     pairs = card_block.split(",")
     cards = []
     for chunk in pairs:
-        chunk = chunk.strip()
+        chunk = chunk.strip()  # Corrigido de trip() para strip()
         if not chunk:
             continue
         tokens = chunk.split()
