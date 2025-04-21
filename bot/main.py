@@ -155,6 +155,7 @@ async def set_bot_commands(bot: Bot):
 
     # Admin-specific commands
     admin_commands = [
+        BotCommand(command="capturar", description="Capturar um card"),
         BotCommand(command="addcarta", description="(Admin) Adicionar uma nova carta"),
         BotCommand(command="imgpd", description="(Admin) Adicionar imagem a um grupo"),
         BotCommand(command="rclicar", description="(Admin) Distribuir pokebolas"),
@@ -165,7 +166,6 @@ async def set_bot_commands(bot: Bot):
         BotCommand(command="jornada", description="Registrar-se no bot"),
         BotCommand(command="mochila", description="Ver sua mochila"),
         BotCommand(command="pokebanco", description="Ver suas pokecoins e pokebolas"),
-        BotCommand(command="capturar", description="Capturar um card"),
         BotCommand(command="pokebola", description="Exibir informações sobre um card"),
         BotCommand(command="pokemart", description="Acessar o Pokémart"),
         BotCommand(command="pokedex", description="Ver todas as coleções"),
