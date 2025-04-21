@@ -306,6 +306,16 @@ async def roubar_accept_callback(callback: CallbackQuery) -> None:
 
     try:
         async with get_session() as session:
+            # Consolidar possíveis duplicatas de inventário para ambos os usuários
+            # Fazemos isso primeiro para evitar problemas durante o carregamento dos inventários
+            try:
+                await consolidate_inventory_duplicates(session, requester_id)
+                await consolidate_inventory_duplicates(session, callback.from_user.id)
+            except Exception as e:
+                logger.error("Erro durante consolidação de inventário: %s", e)
+                await callback.answer("Erro durante verificação de inventário.", show_alert=True)
+                return
+            
             # Carrega o solicitante e seu inventário
             req_result = await session.execute(
                 select(User).where(User.id == requester_id).options(joinedload(User.inventory))
@@ -323,14 +333,6 @@ async def roubar_accept_callback(callback: CallbackQuery) -> None:
                              requester_id, callback.from_user.id)
                 await callback.answer("Usuário não encontrado ou não registrado.", show_alert=True)
                 return
-                
-            # Consolidar possíveis duplicatas de inventário para ambos os usuários
-            await consolidate_inventory_duplicates(session, requester_id)
-            await consolidate_inventory_duplicates(session, callback.from_user.id)
-
-            # Recarregar o inventário após consolidação para ter os dados mais atualizados
-            await session.refresh(requester, ["inventory"])
-            await session.refresh(target_user, ["inventory"])
 
             # Verifica se o alvo possui as cartas solicitadas
             for (card_id, qty) in requested_cards:
@@ -375,6 +377,8 @@ async def roubar_accept_callback(callback: CallbackQuery) -> None:
     except Exception as e:
         logger.exception("Erro durante processamento da troca (trade_id=%s): %s", trade_id, e)
         await callback.answer("Erro interno durante a troca.", show_alert=True)
+        # Marca a troca como não mais em processamento para permitir nova tentativa
+        trade_data["processing"] = False
         return
 
     try:

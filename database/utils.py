@@ -30,7 +30,8 @@ async def consolidate_inventory_duplicates(session: AsyncSession, user_id: Optio
             # Carrega o usuário específico e seu inventário
             user_query = select(User).where(User.id == user_id).options(joinedload(User.inventory))
             user_result = await session.execute(user_query)
-            users = [user_result.scalar_one_or_none()]
+            # Add unique() call before scalar_one_or_none() to handle joined eager loads against collections
+            users = [user_result.unique().scalar_one_or_none()]
             if users[0] is None:
                 logger.warning(f"Usuário ID {user_id} não encontrado para consolidação de inventário")
                 return stats
@@ -38,7 +39,8 @@ async def consolidate_inventory_duplicates(session: AsyncSession, user_id: Optio
             # Carrega todos os usuários e seus inventários
             user_query = select(User).options(joinedload(User.inventory))
             user_result = await session.execute(user_query)
-            users = user_result.scalars().all()
+            # Add unique() call before scalars() to handle joined eager loads against collections
+            users = user_result.unique().scalars().all()
         
         # Para cada usuário, encontra duplicatas e consolida
         for user in users:
