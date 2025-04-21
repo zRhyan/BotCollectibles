@@ -7,6 +7,17 @@ from database.session import get_session
 
 router = Router()
 
+# Lista de grupos oficiais onde o comando pode ser usado
+OFFICIAL_GROUPS = {
+    "pokutrocas": -1002618854262,
+    "pokutv": -1002618485697,
+    "pokurandom": -1002535827033,
+    "pokumusica": -1002640439235,
+    "pokuasia": -1002582806902,
+    "pokuanimagame": -1002521798243,
+    "pokuginasio": -1002533762710
+}
+
 # Adiciona dicionário para rastrear doações pendentes
 active_donations = {}
 
@@ -16,6 +27,22 @@ async def doarbolas_command(message: types.Message):
     Handles the /doarbolas command for donating Pokébolas.
     Expected format: /doarbolas <quantity|*> <nickname>
     """
+    # Verificar se o comando está sendo usado em um grupo oficial
+    chat = message.chat
+    if not chat.username or chat.username.lower() not in OFFICIAL_GROUPS:
+        await message.reply(
+            "❌ **Este comando só pode ser usado nos grupos oficiais:**\n\n"
+            "☀️ GERAL @pokutrocas\n"
+            "☀️ TV @pokutv\n"
+            "☀️ RANDOM @pokurandom\n"
+            "☀️ MÚSICA @pokumusica\n"
+            "☀️ ÁSIA @pokuasia\n"
+            "☀️ ANIMAGAME @pokuanimagame\n"
+            "☀️ GINÁSIO @pokuginasio",
+            parse_mode=ParseMode.MARKDOWN
+        )
+        return
+        
     user_id = message.from_user.id
 
     # Verifica se já há um processo de doação em andamento
