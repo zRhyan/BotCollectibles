@@ -92,11 +92,6 @@ Isso é diferente do fluxo original que era mais textual. Será necessário dete
 - Parte 2: Evolução avançada, painel de admin, wishlist aperfeiçoada, funcionalidades extras e quaisquer outros requisitos adicionais.
 
 8. Observações e Acordos
-- Tempo de Entrega da Parte 1: aproximadamente 5 a 7 dias.
-- Valor da Parte 1: R$ 150,00.
-- Valor da Parte 2: R$ 150,00.
-- A cliente pode pagar a Parte 2 no mês seguinte.
-- Comando para dar capturas e coins aos admins será implementado na Parte 2, porém a base para /add, /addb etc. já estará na Parte 1.
 
 
 Próximos Passos
