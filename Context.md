@@ -92,11 +92,7 @@ This differs from the original flow which was more textual. It will be necessary
 - Part 2: Advanced evolution, admin panel, improved wishlist, extra functionalities, and any other additional requirements.
 
 ### 8. Notes and Agreements
-- Delivery Time for Part 1: approximately 5 to 7 days.
-- Value of Part 1: R$ 150.00.
-- Value of Part 2: R$ 150.00.
-- The client can pay for Part 2 in the following month.
-- Command to give captures and coins to admins will be implemented in Part 2, but the foundation for /add, /addb etc. will already be in Part 1.
+
 
 ## Next Steps
 1. Define Scope of Part 1: It has already been defined that only explicitly agreed functionalities remain in Part 1. Commands to give coins and extra banners to admins, for example, will be in Part 2.(X)
